@@ -2,6 +2,10 @@
 read: ../samples/read.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
+../samples/thingmagic_read.o: $(HEADERS) $(LIB)
+thingmagic_read: ../samples/thingmagic_read.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
+
 ../samples/blockpermalock.o: $(HEADERS) $(LIB)
 blockpermalock: ../samples/blockpermalock.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)

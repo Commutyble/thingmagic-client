@@ -1,12 +1,10 @@
-SDK_FOLDER = /home/pi/mercuryapi-1.35.1.103/c/src/api
-ALL_DIRS = $(SDK_FOLDER)
 ifeq ($(PLATFORM),EMBEDDED)
 ENDIANNESS = BIG
-include $(SDK_FOLDER)/arch/ARM/ixp42x/module.mk
+include arch/ARM/ixp42x/module.mk
 STRIP ?= $(TOOLS_PATH)/strip
 
 else ifeq ($(PLATFORM), BB_LINUX)
-include $(SDK_FOLDER)/arch/ARM/bb/module.mk
+include arch/ARM/bb/module.mk
 
 else
 STRIP ?= strip
@@ -19,7 +17,7 @@ SERIAL_READER_ONLY = 1
 endif 
 
 ifneq ($(SERIAL_READER_ONLY), 1)
-LTKC_LIB_DIR    = $(SDK_FOLDER)/lib/LTK/LTKC/Library
+LTKC_LIB_DIR    = lib/LTK/LTKC/Library
 LTK_INC_DIR     = $(LTKC_LIB_DIR)
 LTK_TM_INC_DIR  = $(LTKC_LIB_DIR)/LLRP.org
 #LLRP = $(LTKC_LIB_DIR)/*.o $(LTKC_LIB_DIR)/LLRP.org/*.o
@@ -120,7 +118,7 @@ PROGS += firmwareload
 PROGS += locktag
 PROGS += multireadasync
 PROGS += read
-PROGS += custom_read
+PROGS += thingmagic_read
 PROGS += readasync
 PROGS += readintoarray
 PROGS += blockpermalock
@@ -162,7 +160,6 @@ PROGS += RegulatoryTesting
 PROGS += returnloss
 PROGS += RegionConfiguration
 PROGS += deviceDetection
-PROGS += passThrough
 endif
 
 ifneq ($(SERIAL_READER_ONLY), 1)
