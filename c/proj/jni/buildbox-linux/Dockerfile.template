@@ -1,0 +1,11 @@
+FROM phusion/holy-build-box-64
+
+# Create a real user, as described in
+# https://vsupalov.com/docker-shared-permissions/
+# This saves us from the problem of all output files belonging to root
+
+ARG USER_ID
+ARG GROUP_ID
+RUN groupadd -g $GROUP_ID user
+RUN adduser --uid $USER_ID --gid $GROUP_ID user
+USER user
