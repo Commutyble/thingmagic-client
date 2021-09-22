@@ -348,6 +348,7 @@ int main(int argc, char * argv[]) {
   }
   int read_index = 0;
 
+  fflush(stdout);
   while (true) {
     ret = TMR_read(rp, 100, NULL);
     int total_count = 0;
@@ -549,6 +550,7 @@ int main(int argc, char * argv[]) {
       }
 
       printf("\n");
+      fflush(stdout);
 
     } // end while has more tags
     #endif
