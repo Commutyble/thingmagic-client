@@ -30,8 +30,9 @@
                          "reader-uri : e.g., 'tmr:///COM1' or 'tmr:///dev/ttyS0/' or 'tmr://readerIP'\n"\
                          "[--ant n] : e.g., '--ant 1'\n"\
                          "[--pow read_power] : e.g, '--pow 2300'\n"\
-                         "Example for UHF modules: 'tmr:///com4' or 'tmr:///com4 --ant 1,2' or 'tmr:///com4 --ant 1,2 --pow 2300'\n"\
-                         "Example for HF/LF modules: 'tmr:///com4' \n");}
+                         "[--pow1 read_power] : e.g, '--pow 2300'\n"\
+                         "[--pow2 read_power] : e.g, '--pow 2300'\n"\
+                         "Example: 'tmr:///dev/ttyACM0 --ant 1,2 --pow1 1700 --pow2 1500'\n");}
 
 void errx(int exitval,
   const char * fmt, ...) {
@@ -114,6 +115,8 @@ int main(int argc, char * argv[]) {
   TMR_Region region;
   #define READPOWER_NULL (-12345)
   int readpower = READPOWER_NULL;
+  int readpower1 = READPOWER_NULL;
+  int readpower2 = READPOWER_NULL;
   #ifndef BARE_METAL
   uint8_t i;
   #endif /* BARE_METAL*/
@@ -142,7 +145,34 @@ int main(int argc, char * argv[]) {
       }
       parseAntennaList(buffer, & antennaCount, argv[i + 1]);
       antennaList = buffer;
-    } else if (0 == strcmp("--pow", argv[i])) {
+    } 
+    else if (0 == strcmp("--pow1", argv[i])) {
+      long retval;
+      char * startptr;
+      char * endptr;
+      startptr = argv[i + 1];
+      retval = strtol(startptr, & endptr, 0);
+      if (endptr != startptr) {
+        readpower1 = retval;
+        fprintf(stdout, "Requested read power1: %d cdBm\n", readpower1);
+      } else {1Ω
+        fprintf(stdout, "Can't parse read power1: %s\n", argv[i + 1]);
+      }
+    } 
+    else if (0 == strcmp("--pow2", argv[i])) {
+      long retval;
+      char * startptr;
+      char * endptr;
+      startptr = argv[i + 1];
+      retval = strtol(startptr, & endptr, 0);
+      if (endptr != startptr) {
+        readpower2 = retval;
+        fprintf(stdout, "Requested read power2: %d cdBm\n", readpower2);
+      } else {
+        fprintf(stdout, "Can't parse read power2: %s\n", argv[i + 1]);
+      }
+    } 
+    else if (0 == strcmp("--pow", argv[i])) {
       long retval;
       char * startptr;
       char * endptr;
@@ -154,7 +184,8 @@ int main(int argc, char * argv[]) {
       } else {
         fprintf(stdout, "Can't parse read power: %s\n", argv[i + 1]);
       }
-    } else {
+    } 
+    else {
       fprintf(stdout, "Argument %s is not recognized\n", argv[i]);
       usage();
     }
@@ -247,6 +278,7 @@ int main(int argc, char * argv[]) {
       printf("Old read power = %d dBm\n", value);
       #endif
       value = readpower;
+
       ret = TMR_paramSet(rp, TMR_PARAM_RADIO_READPOWER, & value);
       #ifndef BARE_METAL
       checkerr(rp, ret, 1, "setting read power");
@@ -261,6 +293,110 @@ int main(int argc, char * argv[]) {
       printf("Read power = %d dBm\n", value);
       #endif
     }
+
+
+  // Read existing antenna read power settings
+  {
+    TMR_PortValueList value;
+    TMR_PortValue valueList[64];
+
+    value.max = numberof(valueList);
+    value.list = valueList;
+
+    ret = TMR_paramGet(rp, TMR_PARAM_RADIO_PORTREADPOWERLIST, &value);
+    if (TMR_SUCCESS != ret)
+    {
+      printf("Can't read antenna power list, error = %d\n", ret);
+    }
+    else {
+      int i;
+
+      putchar('Existing AntennaPowerList: [');
+      for (i = 0; i < valueList->len && i < valueList->max; i++)
+      {
+        printf("[%u,%u]%s", valueList->list[i].port, valueList->list[i].value,
+               ((i + 1) == valueList->len) ? "" : ",");
+      }
+      if (valueList->len > valueList->max)
+      {
+        printf("...");
+      }
+      putchar(']');
+
+      printf("\n");
+    }
+  }
+  // Write new power list
+
+  int powerlistcount = 0;
+  if (READPOWER_NULL != readpower1) {  
+    powerlistcount++;
+  }
+  if (READPOWER_NULL != readpower2) {  
+    powerlistcount++;
+  }
+  if (powerlistcount > 0) {
+
+    char buffer[2*TMR_PortValue];
+    TMR_PortValueList *writeValueList,
+    writeValueList->len = powerlistcount;
+    writeValueList->max = 2;
+    writeValueList->list = &buffer;
+    int index = 0;
+    if (READPOWER_NULL != readpower1) {  
+      writeValueList->list[index].port = 1; 
+      writeValueList->list[index].power = readpower1; 
+      printf("Setting antenna1 read power to %d\n", readpower1);
+      index++;
+    }
+    if (READPOWER_NULL != readpower2) {  
+      writeValueList->list[index].port = 2; 
+      writeValueList->list[index].power = readpower2; 
+      printf("Setting antenna2 read power to %d\n", readpower2);
+      index++;
+    }
+    ret = TMR_paramSet(rp, TMR_PARAM_RADIO_PORTREADPOWERLIST, writeValueList);
+    if (TMR_SUCCESS != ret)
+    {
+      printf("Failed to set antenna read power, error = %d\n", ret);
+    }
+    else {
+      printf("Successfully set antenna power\n");    
+    }
+
+    // Read existing antenna read power settings
+    {
+      TMR_PortValueList value;
+      TMR_PortValue valueList[64];
+
+      value.max = numberof(valueList);
+      value.list = valueList;
+
+      ret = TMR_paramGet(rp, TMR_PARAM_RADIO_PORTREADPOWERLIST, &value);
+      if (TMR_SUCCESS != ret)
+      {
+        printf("Can't read antenna power list, error = %d\n", ret);
+      }
+      else {
+        int i;
+
+        putchar('New AntennaPowerList: [');
+        for (i = 0; i < valueList->len && i < valueList->max; i++)
+        {
+          printf("[%u,%u]%s", valueList->list[i].port, valueList->list[i].value,
+                 ((i + 1) == valueList->len) ? "" : ",");
+        }
+        if (valueList->len > valueList->max)
+        {
+          printf("...");
+        }
+        putchar(']');
+
+        printf("\n");
+      }
+    }  
+
+  }
 
     #ifdef TMR_ENABLE_UHF
     /**
@@ -303,6 +439,7 @@ int main(int argc, char * argv[]) {
       #ifndef BARE_METAL
       checkerr(rp, ret, 1, "Setting Metadata Flags");
       #endif
+
     }
 
   /**
@@ -335,6 +472,18 @@ int main(int argc, char * argv[]) {
 
   ret = TMR_RP_set_filter( & plan, & filter);
   checkerr(rp, ret, 1, "setting read plan filter");
+
+
+  /**
+   * Specifying the readLength = 0 will retutrn full TID for any
+   * tag read in case of M6e and M6 reader.
+   **/ 
+  static TMR_TagOp op;
+  uint8_t readLen = 0;
+  ret = TMR_TagOp_init_GEN2_ReadData(&op, TMR_GEN2_BANK_TID, 0, readLen);
+  checkerr(rp, ret, 1, "creating tagop: GEN2 read data");
+  ret = TMR_RP_set_tagop(&plan, &op);
+  checkerr(rp, ret, 1, "setting tagop");
 
   /* Commit read plan */
   ret = TMR_paramSet(rp, TMR_PARAM_READ_PLAN, & plan);
@@ -416,6 +565,13 @@ int main(int argc, char * argv[]) {
       #ifndef BARE_METAL
       TMR_getTimeStamp(rp, & trd, timeStr);
       printf("%s Tag ID: %s ", timeStr, idStr);
+
+      if (0 < trd.data.len)
+      {
+        char dataStr[255];
+        TMR_bytesToHex(trd.data.list, trd.data.len, dataStr);
+        printf("DATA(%d): %s ", trd.data.len, dataStr);
+      }
 
       // Enable PRINT_TAG_METADATA Flags to print Metadata value
       {
