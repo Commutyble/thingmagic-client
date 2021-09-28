@@ -155,7 +155,7 @@ int main(int argc, char * argv[]) {
       if (endptr != startptr) {
         readpower1 = retval;
         fprintf(stdout, "Requested read power1: %d cdBm\n", readpower1);
-      } else {1Ω
+      } else {
         fprintf(stdout, "Can't parse read power1: %s\n", argv[i + 1]);
       }
     } 
@@ -311,13 +311,13 @@ int main(int argc, char * argv[]) {
     else {
       int i;
 
-      putchar('Existing AntennaPowerList: [');
-      for (i = 0; i < valueList->len && i < valueList->max; i++)
+      printf("Existing AntennaPowerList: [");
+      for (i = 0; i < value.len && i < value.max; i++)
       {
-        printf("[%u,%u]%s", valueList->list[i].port, valueList->list[i].value,
-               ((i + 1) == valueList->len) ? "" : ",");
+        printf("[%u,%u]%s", value.list[i].port, value.list[i].value,
+               ((i + 1) == value.len) ? "" : ",");
       }
-      if (valueList->len > valueList->max)
+      if (value.len > value.max)
       {
         printf("...");
       }
@@ -337,25 +337,25 @@ int main(int argc, char * argv[]) {
   }
   if (powerlistcount > 0) {
 
-    char buffer[2*TMR_PortValue];
-    TMR_PortValueList *writeValueList,
-    writeValueList->len = powerlistcount;
-    writeValueList->max = 2;
-    writeValueList->list = &buffer;
+    TMR_PortValueList value;
+    TMR_PortValue valueList[2];
+    value.len = powerlistcount;
+    value.max = 2;
+    value.list = valueList;
     int index = 0;
     if (READPOWER_NULL != readpower1) {  
-      writeValueList->list[index].port = 1; 
-      writeValueList->list[index].power = readpower1; 
+      value.list[index].port = 1; 
+      value.list[index].value = readpower1; 
       printf("Setting antenna1 read power to %d\n", readpower1);
       index++;
     }
     if (READPOWER_NULL != readpower2) {  
-      writeValueList->list[index].port = 2; 
-      writeValueList->list[index].power = readpower2; 
+      value.list[index].port = 2; 
+      value.list[index].value = readpower2; 
       printf("Setting antenna2 read power to %d\n", readpower2);
       index++;
     }
-    ret = TMR_paramSet(rp, TMR_PARAM_RADIO_PORTREADPOWERLIST, writeValueList);
+    ret = TMR_paramSet(rp, TMR_PARAM_RADIO_PORTREADPOWERLIST, &value);
     if (TMR_SUCCESS != ret)
     {
       printf("Failed to set antenna read power, error = %d\n", ret);
@@ -380,13 +380,13 @@ int main(int argc, char * argv[]) {
       else {
         int i;
 
-        putchar('New AntennaPowerList: [');
-        for (i = 0; i < valueList->len && i < valueList->max; i++)
+        printf("New AntennaPowerList: [");
+        for (i = 0; i < value.len && i < value.max; i++)
         {
-          printf("[%u,%u]%s", valueList->list[i].port, valueList->list[i].value,
-                 ((i + 1) == valueList->len) ? "" : ",");
+          printf("[%u,%u]%s", value.list[i].port, value.list[i].value,
+                 ((i + 1) == value.len) ? "" : ",");
         }
-        if (valueList->len > valueList->max)
+        if (value.len > value.max)
         {
           printf("...");
         }
@@ -394,6 +394,7 @@ int main(int argc, char * argv[]) {
 
         printf("\n");
       }
+
     }  
 
   }
