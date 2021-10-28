@@ -475,6 +475,8 @@ int main(int argc, char * argv[]) {
   checkerr(rp, ret, 1, "setting read plan filter");
 
 
+  
+
   /**
    * Specifying the readLength = 0 will retutrn full TID for any
    * tag read in case of M6e and M6 reader.
@@ -485,6 +487,14 @@ int main(int argc, char * argv[]) {
   checkerr(rp, ret, 1, "creating tagop: GEN2 read data");
   ret = TMR_RP_set_tagop(&plan, &op);
   checkerr(rp, ret, 1, "setting tagop");
+  
+  
+  // Set fast search 
+  {
+    TMR_GEN2_Target target = TMR_GEN2_TARGET_AB;
+    ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TARGET, &target);
+    checkerr(rp, ret, 1, "setting Target AB (fast search)");
+  }
 
   /* Commit read plan */
   ret = TMR_paramSet(rp, TMR_PARAM_READ_PLAN, & plan);
