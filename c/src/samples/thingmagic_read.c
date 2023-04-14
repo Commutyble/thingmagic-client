@@ -503,7 +503,7 @@ int main(int argc, char * argv[]) {
   #endif
 
   int recent_read_counts[1000];
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 1000; i++) {
     recent_read_counts[i] = 0;
   }
   int read_index = 0;
@@ -752,6 +752,9 @@ int main(int argc, char * argv[]) {
       usleep(100000); // 100 ms
       recent_read_counts[read_index] = 0;
       read_index = (read_index + 1) % 1000;
+    }
+    else if (read_index == 0) {
+      printf("Total reads in 100 secs: %d.\n", total_recent_read_count);
     }
 
   } // end while true
