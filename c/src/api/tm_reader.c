@@ -6,7 +6,7 @@
  */
 
  /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -142,8 +142,6 @@ TMR_create(TMR_Reader *reader, const char* deviceUri)
   pthread_cond_init(&reader->readCond, NULL);
   pthread_mutex_init(&reader->listenerLock, NULL);
   pthread_mutex_init(&reader->queue_lock, NULL);
-  reader->readExceptionListeners = NULL;
-  reader->statsListeners = NULL;
 #ifdef TMR_ENABLE_UHF
   reader->authReqListeners = NULL;
   reader->statusListeners = NULL;
@@ -152,8 +150,9 @@ TMR_create(TMR_Reader *reader, const char* deviceUri)
   reader->backgroundSetup = false;
   reader->parserSetup = false;
 #endif
+  reader->readExceptionListeners = NULL;
+  reader->statsListeners = NULL;
   reader->readListeners = NULL;
-  reader->dutyCycle = false;
   reader->paramWait = false;
   reader->hasContinuousReadStarted = false;
   reader->lastReportedException = TMR_SUCCESS;
@@ -312,14 +311,9 @@ TMR_Status
 TMR_reader_init_internal(struct TMR_Reader *reader)
 {
   char errMsg[256];
-
-#ifdef TMR_ENABLE_UHF
-  TMR_RP_init_simple(&reader->readParams.defaultReadPlan, 0, NULL, 
-                         TMR_TAG_PROTOCOL_GEN2, 1);
-#endif /* TMR_ENABLE_UHF */
+  TMR_RP_init_simple(&reader->readParams.defaultReadPlan, 0, NULL, TMR_TAG_PROTOCOL_NONE, 0);
   reader->readParams.readPlan = &reader->readParams.defaultReadPlan;
   reader->connected = false;
-  reader->pSupportsResetStats = NULL;
   reader->transportListeners = NULL;
   reader->readParams.onTime = 0;
 #ifdef SINGLE_THREAD_ASYNC_READ
@@ -353,29 +347,29 @@ TMR_reader_init_internal(struct TMR_Reader *reader)
   reader->tagQueueHead = NULL;
   reader->tagQueueTail = NULL;
   reader->isStatusResponse = false;  
-  reader->statsFlag = TMR_READER_STATS_FLAG_NONE;
   reader->isOffTimeAdded = false;
   reader->fetchTagReads = false;
   reader->tagFetchTime = 0;
   reader->searchStatus = false;
+  reader->finishedReading = true;
+#endif
 #ifdef TMR_ENABLE_UHF
   reader->streamStats = TMR_SR_STATUS_NONE;
 #endif /* TMR_ENABLE_UHF */
-  reader->finishedReading = true;
-#endif
+  reader->statsFlag = TMR_READER_STATS_FLAG_NONE;
   reader->subOffTime = 0;
   reader->continuousReading = false;
   reader->numberOfTagsToRead = 0;
+#ifdef TMR_ENABLE_HF_LF
   reader->featureFlags = TMR_READER_FEATURES_FLAG_NONE;
+#endif /* TMR_ENABLE_HF_LF */
   reader->triggerRead = false;
-  reader->isM6eVariant = false;
   reader->isStopNTags = false;
+  reader->portmask = 0;
 #ifdef TMR_ENABLE_UHF
   reader->fastSearch = false;
-  reader->portmask = 0;
   reader->isReadAfterWrite = false;
   reader->extendedAntOption = 0;
-  reader->isPerAntTimeSet = 0;
 #endif /* TMR_ENABLE_UHF */
 #if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
   reader->regulatoryParams.RegMode = TIMED;
@@ -383,10 +377,8 @@ TMR_reader_init_internal(struct TMR_Reader *reader)
   reader->regulatoryParams.regOnTime = 500;
   reader->regulatoryParams.regOffTime = 0;
 #endif /* TMR_ENABLE_HF_LF || BARE_METAL */
-
-  /* take backup of previous value of reader stats */
-  reader->curStatsFlag = 0;
   reader->isAntennaSet = false;
+  reader->userMetadataFlag = TMR_TRD_METADATA_FLAG_ALL;
 
 #ifdef TMR_ENABLE_HF_LF
   reader->isProtocolDynamicSwitching = false;
@@ -541,6 +533,7 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
   uint32_t starttimeLow, starttimeHigh;
   TMR_TagReadData *results;
   TMR_Status ret;
+  bool isOpFailed = false;
 #ifdef TMR_ENABLE_API_SIDE_DEDUPLICATION
   bool uniqueByAntenna, uniqueByData, recordHighestRssi, uniqueByProtocol;
 #endif /* TMR_ENABLE_API_SIDE_DEDUPLICATION */
@@ -594,12 +587,12 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
     ret = TMR_read(reader, readTimeMs, &count);
     if ((TMR_SUCCESS != ret) && (TMR_ERROR_TAG_ID_BUFFER_FULL != ret))
     {
-      goto out;
+      break;
     }
 
     if (0 == count)
     {
-      goto out;
+      break;
     }
     else if (-1 == count) /* Unknown - streaming */
     {
@@ -616,10 +609,11 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
       if (NULL == newResults)
       {
         ret = TMR_ERROR_OUT_OF_MEMORY;
-        goto out;
+        break;
       }
       results = newResults;
     }
+
     while (TMR_SUCCESS == TMR_hasMoreTags(reader))
     {
       if (tagsRead == alloc)
@@ -630,16 +624,20 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
         if (NULL == newResults)
         {
           ret = TMR_ERROR_OUT_OF_MEMORY;
-          goto out;
+          isOpFailed = true;
+          break;
         }
         results = newResults;
       }
+
       TMR_TRD_init(&results[tagsRead]);
       ret = TMR_getNextTag(reader, &results[tagsRead]);
       if (TMR_SUCCESS != ret)
       {
-        goto out;
+        isOpFailed = true;
+        break;
       }
+
 #ifndef TMR_ENABLE_API_SIDE_DEDUPLICATION
       tagsRead++;
 #else
@@ -653,14 +651,13 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
         int dupIndex = TMR_findDupTag(reader, last, results, tagsRead,
                         uniqueByAntenna, uniqueByData, uniqueByProtocol);
         if (-1 == dupIndex)
-          {
-            tagsRead++;
-          }
+        {
+          tagsRead++;
+        }
         else
-          {
-            TMR_updateDupTag(reader, &results[dupIndex], last,
-                             recordHighestRssi);
-          }
+        {
+          TMR_updateDupTag(reader, &results[dupIndex], last, recordHighestRssi);
+        }
       }
       else
       {
@@ -668,13 +665,22 @@ TMR_readIntoArray(struct TMR_Reader *reader, uint32_t timeoutMs,
       }
 #endif /* TMR_ENABLE_API_SIDE_DEDUPLICATION */
     }
+
+    if(isOpFailed)
+    {
+      break;
+    }
+
     elapsed = tm_time_subtract(tmr_gettime_low(), starttimeLow);
 
   }while (elapsed <= timeoutMs);
-out:
+
   if (NULL != tagCount)
+  {
     *tagCount = tagsRead;
+  }
   *result = results;
+
   return ret;
 }
 
@@ -684,56 +690,20 @@ TMR_Status
 validateReadPlan(TMR_Reader *reader, TMR_ReadPlan *plan,
                   TMR_AntennaMapList *txRxMap, uint32_t protocols)
 {
-  TMR_Status ret = TMR_SUCCESS;
-  int i, j;
-
   if (TMR_READ_PLAN_TYPE_MULTI == plan->type)
   {
-#ifdef TMR_ENABLE_HF_LF
-    if (reader->isProtocolDynamicSwitching)
-    {
-      reader->isProtocolDynamicSwitching = false;
-      return TMR_ERROR_UNSUPPORTED;
-    }
-#endif /* TMR_ENABLE_HF_LF */
-
+#ifndef TMR_ENABLE_GEN2_ONLY
+    int i;
     plan->u.multi.totalWeight = 0;
     for (i = 0; i < plan->u.multi.planCount; i++)
     {
-      ret = validateReadPlan(reader, plan->u.multi.plans[i], txRxMap, protocols);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
       plan->u.multi.totalWeight += plan->u.multi.plans[i]->weight;
     }
+#else
+  return TMR_ERROR_UNSUPPORTED;
+#endif /* TMR_ENABLE_GEN2_ONLY */
   }
-  else if (TMR_READ_PLAN_TYPE_SIMPLE == plan->type)
-  {
-    if (0 == ((1 << (plan->u.simple.protocol - 1)) & protocols))
-    {
-      return TMR_ERROR_INVALID_PROTOCOL_SPECIFIED;
-    }
-    for (i = 0 ; i < plan->u.simple.antennas.len; i++)
-    { 
-      /* Check for antenna number. It should be non-zero otherwise skip this validation*/
-      if(plan->u.simple.antennas.list[i])
-      {
-        for (j = 0; j < txRxMap->len; j++)
-        { 
-          if (plan->u.simple.antennas.list[i] == txRxMap->list[j].antenna)
-          {
-            break;
-          }
-        }
-        if (j == txRxMap->len)
-        {
-          return TMR_ERROR_INVALID_ANTENNA_CONFIG;
-        }
-      }
-    }
-  }
-  return ret;
+  return TMR_SUCCESS;
 }
 
 bool versionCompare(uint8_t *readerVersion, uint8_t *checkVersion)
@@ -768,99 +738,8 @@ bool versionCompare(uint8_t *readerVersion, uint8_t *checkVersion)
  return true;
 }
 
-#ifdef TMR_ENABLE_UHF
-void isExtendedLogicalAntennaSupported(struct TMR_Reader *reader, uint8_t *checkVersion)
-{
-  switch (reader->u.serialReader.versionInfo.hardware[0])
-  {
-    case TMR_SR_MODEL_M6E:
-    case TMR_SR_MODEL_M6E_I:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x23; checkVersion[2] = 0x01; checkVersion[3] = 0x06;
-      break;
-    default:
-      checkVersion[0] = 0xFF; checkVersion[1] = 0xFF; checkVersion[2] = 0xFF; checkVersion[3] = 0xFF;
-  }
-}
-
-void isMultiSelectSupported(struct TMR_Reader *reader, uint8_t *checkVersion)
-{
-  switch (reader->u.serialReader.versionInfo.hardware[0])
-  {
-    case TMR_SR_MODEL_M6E:
-    case TMR_SR_MODEL_M6E_I:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x23; checkVersion[2] = 0x00; checkVersion[3] = 0x15;
-      break;
-    case TMR_SR_MODEL_MICRO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x0b; checkVersion[2] = 0x01; checkVersion[3] = 0x2c;
-      break;
-    case TMR_SR_MODEL_M6E_NANO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x09; checkVersion[2] = 0x00; checkVersion[3] = 0x0d;
-      break;
-    default:
-      checkVersion[0] = 0xFF; checkVersion[1] = 0xFF; checkVersion[2] = 0xFF; checkVersion[3] = 0xFF;
-  }
-}
-
-void IsDutyCycleEnabled(struct TMR_Reader *reader, uint8_t *checkVersion)
-{
-  switch (reader->u.serialReader.versionInfo.hardware[0])
-  {
-    case TMR_SR_MODEL_M6E:
-    case TMR_SR_MODEL_M6E_I:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x21; checkVersion[2] = 0x01; checkVersion[3] = 0x07;
-      break;
-    case TMR_SR_MODEL_MICRO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x09; checkVersion[2] = 0x00; checkVersion[3] = 0x02;
-      break;
-    case TMR_SR_MODEL_M6E_NANO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x07; checkVersion[2] = 0x00; checkVersion[3] = 0x02;
-      break;
-    default:
-      checkVersion[0] = 0xFF; checkVersion[1] = 0xFF; checkVersion[2] = 0xFF; checkVersion[3] = 0xFF;
-  }
-}
-
-void IsAntennaReadTimeEnabled(struct TMR_Reader *reader, uint8_t *checkVersion)
-{
-  switch (reader->u.serialReader.versionInfo.hardware[0])
-  {
-    case TMR_SR_MODEL_M6E:
-    case TMR_SR_MODEL_M6E_I:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x23; checkVersion[2] = 0x00; checkVersion[3] = 0x05;
-      break;
-    case TMR_SR_MODEL_MICRO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x0B; checkVersion[2] = 0x00; checkVersion[3] = 0x14;
-      break;
-    case TMR_SR_MODEL_M6E_NANO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x09; checkVersion[2] = 0x00; checkVersion[3] = 0x05;
-      break;
-    default:
-      checkVersion[0] = 0xFF; checkVersion[1] = 0xFF; checkVersion[2] = 0xFF; checkVersion[3] = 0xFF;
-  }
-}
-
-void isRegionConfiguration(struct TMR_Reader *reader, uint8_t *checkVersion)
-{
-  switch (reader->u.serialReader.versionInfo.hardware[0])
-  {
-    case TMR_SR_MODEL_M6E:
-    case TMR_SR_MODEL_M6E_I:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x23; checkVersion[2] = 0x01; checkVersion[3] = 0x0A;
-      break;
-    case TMR_SR_MODEL_MICRO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x0B; checkVersion[2] = 0x03; checkVersion[3] = 0x0F;
-      break;
-    case TMR_SR_MODEL_M6E_NANO:
-      checkVersion[0] = 0x01; checkVersion[1] = 0x09; checkVersion[2] = 0x00; checkVersion[3] = 0x05;
-      break;
-    default:
-      checkVersion[0] = 0x00; checkVersion[1] = 0x00; checkVersion[2] = 0x00; checkVersion[3] = 0x00;
-  }
-}
-#endif /* TMR_ENABLE_UHF */
-
 #ifdef TMR_ENABLE_HF_LF
-void isAddrByteExtEnabled(struct TMR_Reader *reader, uint8_t *checkVersion)
+void getAddrByteExtEnabledVersion(struct TMR_Reader *reader, uint8_t *checkVersion)
 {
   switch (reader->u.serialReader.versionInfo.hardware[0])
   {
@@ -966,121 +845,66 @@ void checkForAvailableReaderFeatures(struct TMR_Reader *reader)
 #endif
 }
 
+#ifdef TMR_ENABLE_HF_LF
 /* This function will check all available features with respect to firmware version. */
 void checkForAvailableFeatures(struct TMR_Reader *reader)
 { 
   uint8_t i = 0;
-  uint8_t checkVersion[4];
+  uint8_t checkVersion[4] = {0};
   uint8_t *readerVersion = reader->u.serialReader.versionInfo.fwVersion;
 
   while(i < TMR_READER_TOTAL_FEATURES)
   {
     switch (1 << i)
     {
-#ifdef TMR_ENABLE_UHF
-      case TMR_READER_FEATURES_FLAG_DUTY_CYCLE:
-      {
-        IsDutyCycleEnabled(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_DUTY_CYCLE;
-        }
-        break;
-      }
-      case TMR_READER_FEATURES_FLAG_MULTI_SELECT:
-      {
-        isMultiSelectSupported(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_MULTI_SELECT;
-        }
-        break;
-      }
-      case TMR_READER_FEATURES_FLAG_ANTENNA_READ_TIME:
-      {
-        IsAntennaReadTimeEnabled(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_ANTENNA_READ_TIME;
-        }
-        break;
-      }
-      case TMR_READER_FEATURES_FLAG_EXTENDED_LOGICAL_ANTENNA:
-      {
-        isExtendedLogicalAntennaSupported(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_EXTENDED_LOGICAL_ANTENNA;
-        }
-        break;
-      }
-      case TMR_READER_FEATURES_FLAG_REGION_CONFIGURATION:
-      {
-        isRegionConfiguration(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_REGION_CONFIGURATION;
-        }
-        break;
-      }
-#endif /* TMR_ENABLE_UHF */
-#ifdef TMR_ENABLE_HF_LF
       case TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION:
       {
-        isAddrByteExtEnabled(reader, checkVersion);
-        if(versionCompare(readerVersion, checkVersion))
-        {
-          reader->featureFlags |= TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION;
-        }
+        getAddrByteExtEnabledVersion(reader, checkVersion);
         break;
       }
-#endif /* TMR_ENABLE_HF_LF */
       default:
         break;
     }
+
+    if (versionCompare(readerVersion, checkVersion))
+    {
+      reader->featureFlags |= (1 << i);
+    }
+
     i++;
   }
 }
+#endif /* TMR_ENABLE_HF_LF */
 
 TMR_Status
 TMR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
 {
   TMR_Status ret;
-
   ret = TMR_SUCCESS;
 
   switch (key)
   {
 #if defined(TMR_ENABLE_BACKGROUND_READS)|| defined(SINGLE_THREAD_ASYNC_READ)
-  case TMR_PARAM_READ_ASYNCOFFTIME:
+    case TMR_PARAM_READ_ASYNCOFFTIME:
       {
         if (TMR_READER_TYPE_LLRP != reader->readerType)
         {
-            if((*(uint32_t *)value) > TMR_MAX_VALUE)
-            {
-              return TMR_ERROR_INVALID_VALUE;
-            }
-			if (reader->readParams.asyncOffTime != *(uint32_t *)value)
-			{
-				uint32_t asyncOffTime = reader->readParams.asyncOffTime;
-				reader->readParams.asyncOffTime = *(uint32_t *)value;
-				if (reader->continuousReading)
-				{
-					ret = restart_reading(reader);
-					if(ret != TMR_SUCCESS)
-					{
-						reader->readParams.asyncOffTime = asyncOffTime;
-					}
-				}
-			}
-        }
-        else
-        {
-          goto LEVEL1;
+          if((*(uint32_t *)value) > TMR_MAX_VALUE)
+          {
+            return TMR_ERROR_INVALID_VALUE;
+          }
+
+          /* Modifying off time while read is in progress is not allowed. */
+          if (reader->continuousReading)
+          {
+            return TMR_ERROR_UNSUPPORTED;
+          }
+
+          reader->readParams.asyncOffTime = *(uint32_t*)value;
+          break;
         }
       }
-    break;
-  case TMR_PARAM_READ_ASYNCONTIME:
+    case TMR_PARAM_READ_ASYNCONTIME:
       {
         if ((TMR_READER_TYPE_LLRP != reader->readerType)
 #ifdef TMR_ENABLE_LLRP_READER
@@ -1092,31 +916,24 @@ TMR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
           {
             return TMR_ERROR_INVALID_VALUE;
           }
-		  if (reader->readParams.asyncOnTime != *(uint32_t *)value)
-		  {
-			  uint32_t asyncOnTime = reader->readParams.asyncOnTime;
-			  reader->readParams.asyncOnTime = *(uint32_t *)value;
-			  if (reader->continuousReading)
-			  {
-				  ret = restart_reading(reader);
-				  if(ret != TMR_SUCCESS)
-				  {
-					  reader->readParams.asyncOnTime = asyncOnTime;
-				  }
-			  }
-		  }
-	}
-        else
-        {
-          goto LEVEL1;
+
+          /* Modifying on time while read is in progress is not allowed. */
+          if (reader->continuousReading)
+          {
+            return TMR_ERROR_UNSUPPORTED;
+          }
+
+          reader->readParams.asyncOnTime = *(uint32_t*)value;
+          break;
         }
       }
-    break;
-LEVEL1:
 #endif
-  default:
-    ret = reader->paramSet(reader, key, value);
+    default:
+    {
+      ret = reader->paramSet(reader, key, value);
+    }
   }
+
   return ret;
 }
 
@@ -1125,49 +942,44 @@ TMR_Status
 TMR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
 {
   TMR_Status ret;
-
   ret = TMR_SUCCESS;
 
   switch (key)
   {
-  case TMR_PARAM_READ_PLAN:
-  {
-    TMR_ReadPlan *plan = value;
-    *plan = *reader->readParams.readPlan;
-    break;
-  }
+    case TMR_PARAM_READ_PLAN:
+      {
+        TMR_ReadPlan *plan = value;
+        *plan = *reader->readParams.readPlan;
+        
+        break;
+      }
 #if defined(TMR_ENABLE_BACKGROUND_READS)|| defined(SINGLE_THREAD_ASYNC_READ) 
-  case TMR_PARAM_READ_ASYNCOFFTIME:
-  {
-    if (TMR_READER_TYPE_LLRP != reader->readerType)
-    {
-    *(uint32_t *)value = reader->readParams.asyncOffTime;
-    }
-    else
-    {
-      goto LEVEL;
-    }
-    break;
-  }
-  case TMR_PARAM_READ_ASYNCONTIME:
+    case TMR_PARAM_READ_ASYNCOFFTIME:
+      {
+        if (TMR_READER_TYPE_LLRP != reader->readerType)
+        {
+          *(uint32_t *)value = reader->readParams.asyncOffTime;
 
-    if ((TMR_READER_TYPE_LLRP != reader->readerType)
+          break;
+        }
+      }
+    case TMR_PARAM_READ_ASYNCONTIME:
+    {
+      if ((TMR_READER_TYPE_LLRP != reader->readerType)
 #ifdef TMR_ENABLE_LLRP_READER
-       || (!(reader->u.llrpReader.featureFlags & TMMP_READER_FEATURES_FLAG_PERANTENNA_ONTIME))
+         || (!(reader->u.llrpReader.featureFlags & TMMP_READER_FEATURES_FLAG_PERANTENNA_ONTIME))
 #endif
-        )
-    {
-      *(uint32_t *)value = reader->readParams.asyncOnTime;
+          )
+      {
+        *(uint32_t *)value = reader->readParams.asyncOnTime;
+        break;
+      }
     }
-    else
-    {
-      goto LEVEL;
-    }
-    break;
-LEVEL:
 #endif
-  default:
-    ret = reader->paramGet(reader, key, value);
+    default:
+    {
+      ret = reader->paramGet(reader, key, value);
+    }
   }
   return ret;
 }
@@ -1344,6 +1156,10 @@ TMR_TRD_init(TMR_TagReadData *trd)
   trd->userMemData.len = 0;
   trd->tidMemData.len = 0;
   trd->reservedMemData.len = 0;
+  trd->epcMemError = -1;
+  trd->tidMemError = -1;
+  trd->userMemError = -1;
+  trd->reservedMemError = -1;
 #endif /* TMR_ENABLE_UHF */
   return TMR_SUCCESS;
 }
@@ -1561,6 +1377,9 @@ TMR_TA_init_gen2(TMR_TagAuthentication *auth, TMR_GEN2_Password password)
  * Initialize a TMR_TagAuthentication structure as Denatran IAV write credential
  *
  * @param auth Pointer to the structure to initialize.
+ * @param idLength
+ * @param tagId
+ * @param len
  * @param data Gen2 Denatran IAV write credential
  */
 TMR_Status
@@ -1602,7 +1421,10 @@ TMR_TA_init_gen2_Denatran_IAV_writeCredentials(TMR_TagAuthentication *auth, uint
  * Initialize a TMR_TagAuthentication structure as Denatran IAV write credential
  *
  * @param auth Pointer to the structure to initialize.
+ * @param length
  * @param data Gen2 Denatran IAV write credential
+ * @param len
+ * @param credentials
  */
 TMR_Status
 TMR_TA_init_gen2_Denatran_IAV_writeSecCredentials(TMR_TagAuthentication *auth, uint8_t length, uint8_t* data, uint8_t len, uint8_t* credentials)
@@ -1980,11 +1802,11 @@ TMR_TagOp_init_GEN2_SecureReadData(TMR_TagOp *tagop, TMR_GEN2_Bank bank, uint32_
                                    uint8_t len, uint8_t tagtype, uint8_t passwordType)
 {
   tagop->type = TMR_TAGOP_GEN2_SECURE_READDATA;
-  tagop->u.gen2.u.secureReadData.passwordType = (SecurePasswordType)passwordType;
+  tagop->u.gen2.u.secureReadData.passwordType = (TMR_SecurePasswordType)passwordType;
   tagop->u.gen2.u.secureReadData.readData.bank = bank;
   tagop->u.gen2.u.secureReadData.readData.wordAddress = wordAddress;
   tagop->u.gen2.u.secureReadData.readData.len = len;
-  tagop->u.gen2.u.secureReadData.type = (SecureTagType)tagtype;
+  tagop->u.gen2.u.secureReadData.type = (TMR_SecureTagType)tagtype;
 
   return TMR_SUCCESS;
 }
@@ -2005,7 +1827,7 @@ TMR_TagOp_init_GEN2_SecurePassWord(TMR_TagOp *tagop, uint8_t passwordType, uint3
                                    uint8_t addressLength, uint8_t addressOffset, uint16_t flashOffset)
 {
   
-  tagop->u.gen2.u.secureReadData.passwordType = (SecurePasswordType)passwordType;
+  tagop->u.gen2.u.secureReadData.passwordType = (TMR_SecurePasswordType)passwordType;
   tagop->u.gen2.u.secureReadData.password.gen2PassWord.u.gen2Password = gen2PassWord;
   tagop->u.gen2.u.secureReadData.password.secureAddressLength = addressLength;
   tagop->u.gen2.u.secureReadData.password.secureAddressOffset = addressOffset;
@@ -2670,7 +2492,7 @@ TMR_TagOp_init_GEN2_Denatran_IAV_Authenticate_OBU(TMR_TagOp *tagop, uint8_t payl
  * Initialize a TMR_TagOp as a Gen2 IAVDenatran ACTIVATE_SINIAV_MODE operation with the provided parameter
  * @param tagop Pointer to the tagop structure to initialize 
  * @param payload 1byte->[TC(Transmission Count) 1bit + RFFU(Reserved For Furture Use) 7bits]
- * @param data 64 bits of token number to activate the tag
+ * @param token 64 bits of token number to activate the tag
  */
 TMR_Status
 TMR_TagOp_init_GEN2_Denatran_IAV_Activate_Siniav_Mode(TMR_TagOp *tagop, uint8_t payload, TMR_uint8List *token)
@@ -2779,6 +2601,7 @@ TMR_TagOp_init_GEN2_Denatran_IAV_OBU_ReadFromMemMap(TMR_TagOp *tagop, uint8_t pa
  * @param payload The OBU_WriteToMemMap Payload
  * @param wordAddress pointer to the USER data
  * @param word data to be written
+ * @param tagId
  * @param data credentials written word
  */
 TMR_Status
@@ -2800,9 +2623,8 @@ TMR_TagOp_init_GEN2_Denatran_IAV_OBU_WriteToMemMap(TMR_TagOp *tagop, uint8_t pay
  * Initialize a TMR_TagOp as a Gen2 IAVDenatran Write Sec operation with the provided parameter
  * @param tagop Pointer to the tagop structure to initialize 
  * @param payload The OBU_WriteToMemMap Payload
- * @param wordAddress pointer to the USER data
- * @param dataWords 4 data words
  * @param data credentials written word
+ * @param credentials
  */
 TMR_Status
 TMR_TagOp_init_GEN2_Denatran_IAV_WriteSec(TMR_TagOp *tagop, uint8_t payload, uint8_t* data, uint8_t* credentials)
@@ -2866,7 +2688,7 @@ TMR_TagOp_init_GEN2_Denatran_IAV_GetTokenId(TMR_TagOp *tagop)
 /**
  * Initialize a TMR_TagOp as a Gen2 IAVDenatran read sec operation with the provided parameter
  * @param tagop Pointer to the tagop structure to initialize
- * @param payLoad 8 bits for future use
+ * @param payload 8 bits for future use
  * @param wordAddress pointer indicating the sector to be read from USER memory bank
  */
 TMR_Status
@@ -3126,12 +2948,12 @@ TMR_TagOp_init_GEN2_IDS_SL900A_Initialize(TMR_TagOp *tagop, TMR_GEN2_Password ac
    uint16_t raw = 0;
    raw &= (uint16_t)~mask;
    tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.raw = raw;
-   tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.Mode = (DelayMode)delayMode;
+   tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.Mode = (TMR_SL900A_DelayMode)delayMode;
   }
   else
   {
     tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.raw |= mask;
-    tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.Mode = (DelayMode)delayMode;
+    tagop->u.gen2.u.custom.u.ids.u.initialize.delayTime.Mode = (TMR_SL900A_DelayMode)delayMode;
   }
 
   if (delayTime)
@@ -3318,7 +3140,7 @@ TMR_TagOp_init_GEN2_IDS_SL900A_GetBatteryLevel(TMR_TagOp *tagop, TMR_GEN2_Passwo
  * @param tagop Pointer to the tagop struture to initialize.
  * @param accessPassword Gen2 accessPassword
  * @param level IDS apsswordlevel
- * @param passowrd IDS password
+ * @param password IDS password
  * @param logLimits pointer to IDS LogLimits
  */
 TMR_Status
@@ -4194,39 +4016,6 @@ TMR_receiveAutonomousReading(struct TMR_Reader *reader, TMR_TagReadData *trd, TM
   return ret;
 }
 #ifdef TMR_ENABLE_UHF
-TMR_Status isAntDetectEnabled(struct TMR_Reader *reader, uint8_t *antennaList)
-{
-  TMR_Status ret = TMR_SUCCESS;
-  TMR_String model;
-  TMR_String swVersion;
-  char softwareVersion[100];
-  char str[64];
-  bool antDetectionFlag = false;
-  swVersion.value = softwareVersion;
-  swVersion.max = sizeof(softwareVersion)/sizeof(softwareVersion[0]);
-  model.value = str;
-  model.max = 64;
-
-  /* paramGet of software version */
-  TMR_paramGet(reader, TMR_PARAM_VERSION_SOFTWARE, &swVersion);
-  TMR_paramGet(reader, TMR_PARAM_VERSION_MODEL, &model);
-  /* paramGet of antenna detection flag */
-
-  ret = TMR_paramGet(reader, TMR_PARAM_ANTENNA_CHECKPORT, &antDetectionFlag);
-  if(ret == TMR_SUCCESS)
-  {
-    if (((0 == strcmp("M6e Micro", model.value)) || (0 == strcmp("M6e Nano", model.value)) ||
-        ((0 == strcmp("Sargas", model.value)) && ((0 == strncmp(swVersion.value,"5.0",3)) || (swVersion.value[0] < 5))) ||
-        (((0 == strcmp("Sargas", model.value)) || (0 == strcmp("Izar", model.value)) || (0 == strcmp("Astra200", model.value))) &&
-         (((swVersion.value[0] == 5) && (swVersion.value[2] >= 1)) || (swVersion.value[0] > 6)) && (false == antDetectionFlag))) &&
-        (NULL == antennaList))
-    {
-      return TMR_ERROR_UNSUPPORTED;
-    }
-  }
-  return ret;
-}
-
 TMR_Status
 TMR_TagOp_init_GEN2_fdn_ReadREG(TMR_TagOp *tagop, TMR_GEN2_Password accessPassword, uint16_t RegAddress)
 {
@@ -4390,6 +4179,20 @@ TMR_TagOp_init_GEN2_EM4325_ResetAlarms(TMR_TagOp *tagop, TMR_GEN2_Password acces
 
 #ifdef TMR_ENABLE_HF_LF
 /**
+ * Initialize an access password in TMR_TagOp with the provided parameters.
+ *
+ * @param tagop Pointer to the tagop structure to initialize 
+ * @param accessPassword access password.
+ */
+TMR_Status
+TMR_set_accessPassword(TMR_TagOp *tagop, TMR_uint8List *accessPassword)
+{
+  tagop->u.extTagOp.accessPassword = accessPassword;
+
+  return TMR_SUCCESS;
+}
+
+/**
  * Initialize a TMR_TagOp as a write memory operation with the provided parameters.
  * @param tagop Pointer to the tagop structure to initialize.
  * @param memType types of different memory operations
@@ -4400,12 +4203,14 @@ TMR_Status
 TMR_TagOp_init_WriteMemory(TMR_TagOp *tagop, TMR_Memory_Type memType, uint32_t address,
                                      TMR_uint8List *data)
 {
-  tagop->type = TMR_TAGOP_WRITE_MEMORY;
-  tagop->u.writeMem.memType = memType;
-  tagop->u.writeMem.address = address;
-  tagop->u.writeMem.data.len = data->len;
-  tagop->u.writeMem.data.list = data->list;
-  tagop->u.writeMem.data.max = data->max;
+  tagop->type                          = TMR_TAGOP_WRITE_MEMORY;
+  tagop->u.extTagOp.accessPassword     = NULL;
+  tagop->u.extTagOp.writeMem.memType   = memType;
+  tagop->u.extTagOp.writeMem.address   = address;
+  tagop->u.extTagOp.writeMem.data.len  = data->len;
+  tagop->u.extTagOp.writeMem.data.list = data->list;
+  tagop->u.extTagOp.writeMem.data.max  = data->max;
+
   return TMR_SUCCESS;
 }
 
@@ -4419,10 +4224,12 @@ TMR_TagOp_init_WriteMemory(TMR_TagOp *tagop, TMR_Memory_Type memType, uint32_t a
 TMR_Status
 TMR_TagOp_init_ReadMemory(TMR_TagOp *tagop, TMR_Memory_Type memType, uint32_t address, uint8_t len)
 {
-  tagop->type = TMR_TAGOP_READ_MEMORY;
-  tagop->u.readMem.memType = memType;
-  tagop->u.readMem.address = address;
-  tagop->u.readMem.len = len;
+  tagop->type                         = TMR_TAGOP_READ_MEMORY;
+  tagop->u.extTagOp.accessPassword    = NULL;
+  tagop->u.extTagOp.readMem.memType   = memType;
+  tagop->u.extTagOp.readMem.address   = address;
+  tagop->u.extTagOp.readMem.len       = len;
+
   return TMR_SUCCESS;
 }
 
@@ -4430,7 +4237,6 @@ TMR_TagOp_init_ReadMemory(TMR_TagOp *tagop, TMR_Memory_Type memType, uint32_t ad
  * Initialize a TMR_TagOp as a passthrough operation with the provided parameters.
  * @param tagop Pointer to the tagop structure to initialize.
  * @param timeout time to perform the operation
- * @param responseLen expected length of the response
  * @param configFlags configuration flags
  * @param buffer command buffer
  */
@@ -4454,12 +4260,12 @@ TMR_TagOp_init_PassThrough(TMR_TagOp *tagop, uint32_t timeout,
  * 
  * @param filter Pointer to the filter structure to initialize
  * @param UIDMask the mask of the bytes to compare
- * @param byteLen length of UIDMask
+ * @param UIDMaskBitLen length of UIDMask
  */
 TMR_Status TMR_TF_init_uid_select(TMR_TagFilter *filter, uint8_t UIDMaskBitLen, uint8_t *UIDMask)
 {
   filter->type = TMR_FILTER_TYPE_UID_SELECT;
-  memcpy(filter->u.uidSelect.UIDMask, UIDMask, UIDMaskBitLen / 8);
+  memcpy(filter->u.uidSelect.UIDMask, UIDMask, tm_u8s_per_bits(UIDMaskBitLen));
   filter->u.uidSelect.UIDMaskBitLen = UIDMaskBitLen;
 
   return TMR_SUCCESS;
@@ -4606,6 +4412,15 @@ TMR_SR_convertFromEBV(uint8_t *msg, uint8_t length)
       value = (((value >> 1) & 0xfff0000000ULL) | temp);
       break;
     }
+    case 0x08:
+    {
+      while(length)
+      {
+        temp = msg[8-length];
+        length--;
+        value |= (temp << (length*8));
+      }
+    }
     default:
       break;
   }
@@ -4615,9 +4430,10 @@ TMR_SR_convertFromEBV(uint8_t *msg, uint8_t length)
 #ifndef BARE_METAL
 /**
  * Convert the tag timestamp to readable format
+ * 
  * @param rp pointer to reader structure
  * @param read pointer to tag read data structure
- * @param timeStr string to contain converted timestamp
+ * @param timeString string to contain converted timestamp
  */
 void TMR_getTimeStamp(struct TMR_Reader *rp, const struct TMR_TagReadData *read, char *timeString)
 {
@@ -4695,3 +4511,53 @@ void TMR_getTimeStamp(struct TMR_Reader *rp, const struct TMR_TagReadData *read,
   memcpy(timeString, timeStr, (sizeof(timeStr)/sizeof(timeStr[0])));
 }
 #endif /* BARE_METAL */
+
+/** 
+ * This is used to return the errors to user which is/are received 
+ * from the reader as part of read data tag operation.
+ * These errors determine the status of tag operation - failure/success.
+ *
+ * @param memError The error code from the module 
+ */
+void TMR_getReadMemoryErrors(int8_t memError) {
+
+#if defined(TMR_ENABLE_ERROR_STRINGS)
+
+  switch (memError)
+  {
+    case 0: printf("Full Data is received\n");
+      break;
+    case 1: printf("Partial Data is received\n");
+      break;
+    case 2: printf("No Data is received\n");
+      break;
+    case 3: fprintf(stdout, "%s\n", TMR_strerror(TMR_ERROR_GEN2_PROTOCOL_OTHER_ERROR));
+      break;
+    case 4: fprintf(stdout, "%s\n", TMR_strerror(TMR_ERROR_GEN2_PROTOCOL_MEMORY_OVERRUN_BAD_PC));
+      break;
+    case 5: fprintf(stdout, "%s\n", TMR_strerror(TMR_ERROR_GEN2_PROTOCOL_MEMORY_LOCKED));
+      break;
+    case 6: fprintf(stdout, "%s\n", TMR_strerror(TMR_ERROR_GEN2_PROTOCOL_INSUFFICIENT_POWER));
+      break;
+    case 7: fprintf(stdout, "%s\n", TMR_strerror(TMR_ERROR_GEN2_PROTOCOL_NON_SPECIFIC_ERROR));
+      break;
+    default:
+      printf("Unknown Error\n");
+  }
+#endif /* defined(TMR_ENABLE_ERROR_STRINGS) */
+}
+
+/**
+ * @fn void* TMR_idleHandler(void *arg)
+ * @brief In case if there is any busy loop situation occurs in the API, 
+ *	user can use this function to put their code or delay.
+ *
+ * @param arg : void pointer
+ * @return void*
+ */
+void* TMR_idleHandler(void *arg)
+{
+  //Do other work here
+  tmr_sleep(1);
+  return NULL;
+}

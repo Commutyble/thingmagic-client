@@ -1,10 +1,10 @@
 ifeq ($(PLATFORM),EMBEDDED)
 ENDIANNESS = BIG
-include arch/ARM/ixp42x/module.mk
+include ../arch/ARM/ixp42x/module.mk
 STRIP ?= $(TOOLS_PATH)/strip
 
 else ifeq ($(PLATFORM), BB_LINUX)
-include arch/ARM/bb/module.mk
+include ../arch/ARM/bb/module.mk
 
 else
 STRIP ?= strip
@@ -83,7 +83,7 @@ HEADERS += tmr_types.h
 HEADERS += tmr_utils.h
 
 DBG ?= -g
-CWARN = -Werror 
+CWARN = -Werror -Wall
 # Add -Wextra to chase down warnings that might appear on build server, but not dev machines
 #CWARN += -Wextra
 
@@ -110,8 +110,6 @@ CFLAGS += -I. $(DBG) $(CWARN)
 CFLAGS += -fPIC
 
 ifndef SKIP_SAMPLES
-ifneq ($(PLATFORM), BB_LINUX)
-endif
 PROGS += customantennaconfig
 PROGS += filter
 PROGS += firmwareload
@@ -120,46 +118,35 @@ PROGS += multireadasync
 PROGS += read
 PROGS += thingmagic_read
 PROGS += readasync
+PROGS += readasyncgpo
 PROGS += readintoarray
 PROGS += blockpermalock
 PROGS += blockwrite
 PROGS += embeddedreadtid
 PROGS += licensekey
 PROGS += multiprotocolread
-PROGS += savedconfig
 PROGS += writetag
 PROGS += readasynctrack
 PROGS += readasyncfilter
-PROGS += readasyncfilter-ISO18k-6b
 PROGS += serialtime
 PROGS += tagdir
 PROGS += fastid
-PROGS += denatranIAVcustomtagoperations
 PROGS += readerstats
 PROGS += readerInfo
-PROGS += antennalist
-PROGS += securereaddata
 PROGS += readstopTrigger
 PROGS += rebootReader
 PROGS += readasyncGPIOControl
-PROGS += readcustomtransport
-PROGS += savedreadplanconfig
 PROGS += loadsaveconfiguration
-PROGS += bap
 PROGS += readallmembanks-GEN2
 PROGS += gpiocommands
-PROGS += SL900Agetcalibrationdata
-PROGS += SL900Agetsensorvalue
-PROGS += SL900Asetcalibrationdata
-PROGS += SL900Asetsfeparameters
 PROGS += authenticate
-PROGS += readbuffer
 PROGS += untraceable
 PROGS += autonomousmode
 PROGS += RegulatoryTesting
 PROGS += returnloss
 PROGS += RegionConfiguration
 PROGS += deviceDetection
+PROGS += passThrough
 endif
 
 ifneq ($(SERIAL_READER_ONLY), 1)
@@ -178,7 +165,7 @@ update_ltkc_win32: lib/LTK
 	find lib/LTK/LTKC/Library -name '*.h' -exec cp -p {} ltkc_win32/inc/ \;
 	find lib/LTK/LTKC/Library -name '*.c' -exec cp -p {} ltkc_win32/src/ \;
 else
-all: $(STATIC_LIB) $(PROGS)
+all: $(STATIC_LIB) $(SHARED_LIB) $(PROGS)
 
 $(OBJS):
 endif

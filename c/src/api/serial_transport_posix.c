@@ -7,7 +7,7 @@
 
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/file.h>
 #include "tm_reader.h"
 
 #ifdef __APPLE__
@@ -77,6 +78,10 @@ s_open(TMR_SR_SerialTransport *this)
   t.c_cc[VTIME] = 1;
   ret = tcsetattr(c->handle, TCSANOW, &t);
   if (-1 == ret)
+    return TMR_ERROR_COMM_ERRNO(errno);
+
+  ret = flock(c->handle, LOCK_SH | LOCK_NB);
+  if ( -1 == ret)
     return TMR_ERROR_COMM_ERRNO(errno);
 
   return TMR_SUCCESS;

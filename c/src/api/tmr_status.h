@@ -9,7 +9,7 @@
  */
 
  /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,13 +47,15 @@ typedef uint32_t TMR_Status;
 #define TMR_STATUS_GET_TYPE(x)       (((x) >> 24) & 0xff)
 #define TMR_STATUS_GET_VALUE(x)      ((x) & 0xffffff)
 
-#define TMR_SUCCESS_TYPE    0L
-#define TMR_ERROR_TYPE_COMM 1L
-#define TMR_ERROR_TYPE_CODE 2L
-#define TMR_ERROR_TYPE_MISC 3L
-#define TMR_ERROR_TYPE_LLRP 4L
+#define TMR_SUCCESS_TYPE_CODE 0L
+#define TMR_ERROR_TYPE_COMM   1L
+#define TMR_ERROR_TYPE_CODE   2L
+#define TMR_ERROR_TYPE_MISC   3L
+#define TMR_ERROR_TYPE_LLRP   4L
 
-#define TMR_SUCCESS TMR_STATUS_MAKE(TMR_SUCCESS_TYPE, 0)
+#define TMR_SUCCESS_CODE(x)   TMR_STATUS_MAKE(TMR_SUCCESS_TYPE_CODE, (x))
+#define TMR_SUCCESS           TMR_SUCCESS_CODE(0)
+#define TMR_SUCCESS_STREAMING TMR_SUCCESS_CODE(1)
 
 #define TMR_ERROR_CODE(x)                                 TMR_STATUS_MAKE(TMR_ERROR_TYPE_CODE, (x))
 #define TMR_ERROR_IS_CODE(x)                              (TMR_ERROR_TYPE_CODE == TMR_STATUS_GET_TYPE(x))
@@ -98,6 +100,12 @@ typedef uint32_t TMR_Status;
 #define TMR_ERROR_FLASH_WRITE_TO_ILLEGAL_SECTOR           TMR_ERROR_CODE(0x305)
 /**Internal reader error.  Contact support. */
 #define TMR_ERROR_FLASH_VERIFY_FAILED                     TMR_ERROR_CODE(0x306)
+/**This error is returned when Ex10 does not have an application image and remains in bootloader.
+ * When this error is returned, load the peripheral application FW which upgrades both M7e and Ex10 FW. 
+ * This error code is an indication of the state of Ex10 which is useful in diagnosis in case things go wrong.
+ * [Command received is not supported in the currently running program] 
+ */
+#define TMR_ERROR_FLASH_PERIPH_UPGRADE_BAD_CRC            TMR_ERROR_CODE(0x307)
 /**Reader was asked to find tags, but none were detected. */
 #define TMR_ERROR_NO_TAGS_FOUND                           TMR_ERROR_CODE(0x400)
 /**RFID protocol has not been configured. */
@@ -217,11 +225,9 @@ typedef uint32_t TMR_Status;
 #define TMR_ERROR_AUTOREAD_ENABLED                        TMR_ERROR_MISC(19)
 #define TMR_ERROR_FIRMWARE_UPDATE_ON_AUTOREAD             TMR_ERROR_MISC(20)
 #define TMR_ERROR_TIMESTAMP_NULL                          TMR_ERROR_MISC(21)
-#define TMR_ERROR_METADATA_PROTOCOLMISSING                TMR_ERROR_MISC(22)
 #define TMR_ERROR_INVALID_VALUE                           TMR_ERROR_MISC(23)
 #define TMR_ERROR_METADATA_INVALID                        TMR_ERROR_MISC(24)
 #ifdef TMR_ENABLE_HF_LF
-#define TMR_ERROR_METADATA_TAGTYPEMISSING                 TMR_ERROR_MISC(25)
 #define TMR_ERROR_UNSUPPORTED_SECUREREAD_TAGTYPE          TMR_ERROR_MISC(26)
 #endif /* TMR_ENABLE_HF_LF */
 #define TMR_ERROR_INVALID_READER_STATS                    TMR_ERROR_MISC(27)

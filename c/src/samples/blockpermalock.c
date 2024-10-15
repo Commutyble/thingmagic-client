@@ -1,6 +1,6 @@
 /**
 * Sample program that perform BlockPermaLock
-* @file BlockPermaLock.c
+* @file blockpermalock.c
 */
 
 #include <tm_reader.h>
@@ -88,7 +88,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -186,24 +190,6 @@ int main(int argc, char *argv[])
     checkerr(rp, ret, 1, "setting region");  
   }
 
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
   //Use first antenna for operation
   if (NULL != antennaList)
   {

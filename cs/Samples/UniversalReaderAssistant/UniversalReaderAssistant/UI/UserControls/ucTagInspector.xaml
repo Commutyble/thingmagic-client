@@ -1,0 +1,790 @@
+﻿<UserControl x:Class="ThingMagic.URA2.ucTagInspector"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="730" d:DesignWidth="950">
+    <!--<UserControl.Resources>
+        <Style TargetType="{x:Type Label}">
+            <Setter Property="FontWeight" Value="DemiBold" />
+        </Style>
+    </UserControl.Resources>-->
+    <StackPanel Orientation="Vertical" Name="spTagInspector" IsEnabled="False" HorizontalAlignment="Left">
+        <StackPanel Orientation="Vertical" Margin="10" Visibility="Visible">
+            <Label Margin="5" Name="lblNote" Content=" Note : Tag Inspector Operation supports only GEN2/ATA Tags. Rest of the protocols will be ignored"></Label>
+            <GroupBox  Name="tagtoInspect"  Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Tag to Inspect</TextBlock>
+                </GroupBox.Header>
+                <StackPanel Name="grid1" Margin="5" Orientation="Vertical">
+                    <StackPanel.Resources>
+                        <BooleanToVisibilityConverter x:Key="boolToVisible"/>
+                    </StackPanel.Resources>
+                    <StackPanel Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Vertical">
+                                <RadioButton Content="First tag to respond " GroupName="TagtoInspect" IsChecked="True" Margin="3" Name="rbFirstTagIns" Checked="rbFirstTagIns_Checked" />
+                                <RadioButton ToolTipService.ShowOnDisabled="True" ToolTip="Go to Tag Results tab and right-click on a data cell"  Content="Tag selected in Tag Results page" GroupName="TagtoInspect" Margin="3" Name="rbSelectedTagIns" IsEnabled="False"/>
+                            </StackPanel>
+                            <Button Content="Read" Margin="30,3,3,3" Name="btnRead" VerticalAlignment="Top" Width="75" Click="btnRead_Click" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Name="gdTagSelectionCriteria" Visibility="{Binding ElementName=rbSelectedTag, Path=IsChecked, Converter={StaticResource boolToVisible}}" HorizontalAlignment="Left" Width="Auto">
+                        <StackPanel Orientation="Vertical" Margin="3">
+                            <Label Margin="3" Name="lblSelectFilter" Content="" FontWeight="Normal"/>
+                            <Label Margin="3" Content="Error" Name="lblTagInspectorError" Visibility="Collapsed" Foreground="#FFF60909" OpacityMask="#FFFA0000" />
+                        </StackPanel>
+                        <TextBox Height="23" Margin="0,21,71,0" Name="txtEpc" VerticalAlignment="Top" Visibility="Collapsed" HorizontalAlignment="Right" Width="28" />
+                        <TextBox Height="23" HorizontalAlignment="Left" Margin="647,21,0,0" Name="txtData" VerticalAlignment="Top" Visibility="Collapsed" Width="28" />
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Vertical" Margin="10,-7,10,10" Name="spTagInspector_M3e" IsEnabled="True" HorizontalAlignment="Left">
+            <StackPanel.Resources>
+                <Style TargetType="{x:Type StackPanel}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=rbt14443A,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbt15693,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtngen2,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtnata,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Resources>
+            <GroupBox Name="gbM3eTagData" Background="White" Height="Auto" MinWidth="771" MinHeight="100">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Tag Data</TextBlock>
+                </GroupBox.Header>
+                <StackPanel Name="spUID_M3e" Orientation="Vertical" Visibility="Visible">
+                    <Grid Margin="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="127" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Label Grid.Row="1" Grid.Column="0" Margin="3"  HorizontalAlignment="Right" Name="lblUID" Content="UID :" Visibility="Collapsed"></Label>
+                        <TextBox Grid.Row="1" Grid.Column="4" Margin="3,3,-27,3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Width="230" Name="txtUID_M3e" Grid.ColumnSpan="2" Style="{StaticResource CustomTextBox}" Visibility="Collapsed">
+                            <TextBox.CommandBindings>
+                                <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                                <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                            </TextBox.CommandBindings>
+                            <TextBox.ContextMenu>
+                                <ContextMenu Visibility="Collapsed"></ContextMenu>
+                            </TextBox.ContextMenu>
+                        </TextBox>
+                    </Grid>
+                    <Grid Margin="5">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="127" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="127" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Label Grid.Row="0" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="lblM3e00" Visibility="Collapsed"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="3" Cursor="Arrow" MinWidth="100" Background="#0A000000" Name="txtM3e01" Style="{StaticResource CustomTextBox}" Visibility="Collapsed"/>
+                        <Label Grid.Row="0" Grid.Column="2" Margin="3" HorizontalAlignment="Right" Name="lblM3e02"/>
+                        <TextBox Grid.Row="0" Grid.Column="3" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e03" Style="{StaticResource CustomTextBox}" Visibility="Collapsed"/>
+
+                        <Label Grid.Row="1" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="lblM3e10"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e11" Style="{StaticResource CustomTextBox}" Visibility="Collapsed"/>
+                        <Label Grid.Row="1" Grid.Column="2" Margin="3" HorizontalAlignment="Right" Name="lblM3e12"/>
+                        <TextBox Grid.Row="1" Grid.Column="3" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e13" Visibility="Collapsed"/>
+
+                        <Label Grid.Row="2" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="lblM3e20"/>
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e21" Visibility="Collapsed"/>
+                        <Label Grid.Row="2" Grid.Column="2" Margin="3" HorizontalAlignment="Right" Name="lblM3e22"/>
+                        <TextBox Grid.Row="2" Grid.Column="3" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e23" Visibility="Collapsed"/>
+
+                        <Label Grid.Row="3" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="lblM3e30"/>
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e31" Visibility="Collapsed"/>
+                        <Label Grid.Row="3" Grid.Column="2" Margin="3" HorizontalAlignment="Right" Name="lblM3e32"/>
+                        <TextBox Grid.Row="3" Grid.Column="3" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e33" Visibility="Collapsed"/>
+
+                        <Label Grid.Row="4" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="lblM3e40"/>
+                        <TextBox Grid.Row="4" Grid.Column="1" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e41" Visibility="Collapsed"/>
+                        <Label Grid.Row="4" Grid.Column="2" Margin="3" HorizontalAlignment="Right" Name="lblM3e42"/>
+                        <TextBox Grid.Row="4" Grid.Column="3" Margin="3" Cursor="Arrow" MinWidth="100" TextAlignment="Center" Background="#0A000000" Name="txtM3e43" Visibility="Collapsed"/>
+
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+            <GroupBox Name="gbM3eMemory" Background="White" MinHeight="94">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Memory</TextBlock>
+                </GroupBox.Header>
+                <Grid Name="grdM3eTagData" Margin="05">
+                    <StackPanel Margin="10,10,0,0" Name="stkpnlByteAddress" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Horizontal"></StackPanel>
+                    <ScrollViewer Name="sclvwrBlockAddressEdit" Height="Auto" Width="Auto" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" HorizontalAlignment="Left" Margin="0,34,0,10">
+                        <StackPanel Name="stkpnlBlockAddress" Height="Auto" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Vertical">
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </GroupBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Vertical" Margin="10,-7,10,10" Name="spTagInspector_ATA" IsEnabled="True">
+            <StackPanel.Resources>
+                <Style TargetType="{x:Type StackPanel}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=rbt14443A,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbt15693,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtngen2,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtnata,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+                <Style TargetType="{x:Type TextBlock}">
+                    <Setter Property="FontWeight" Value="DemiBold" />
+                </Style>
+            </StackPanel.Resources>
+            <GroupBox Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold" Text="AEI ATA Tag Details" />
+                </GroupBox.Header>
+                <StackPanel Orientation="Vertical">
+                    <Grid x:Name="gridTagDetails">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="EPC Data : " />
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Grid.ColumnSpan="2" Width="260" Name="txtATAEPCData" IsEnabled="False"/>
+                        <TextBlock Name="lblEquipmentGroup" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Equipment Group : " />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtEquipmentGroup" IsEnabled="False"/>
+                        <TextBlock Name="lblEquipmentInitial" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Equipment Initial : " />
+                        <TextBox Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtEquipmentInitial" IsEnabled="False"/>
+                        <TextBlock Name="lblTagType" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tag Type : " />
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtTagType" IsEnabled="False"/>
+                        <TextBlock Name="lblDataFormat" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Data Format : " />
+                        <TextBox Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtDataFormat" IsEnabled="False"/>
+                        
+
+                        <TextBlock Name="lblASCIIBinaryFormat" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Top" Text="Binary Format : " FontWeight="DemiBold" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" TextWrapping="Wrap"  Name="tblASCIIBinaryFormat" Margin="5" FontWeight="Normal" Width="500"/>
+
+                        <TextBlock Name="lblASCIIFormat" Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Top" Text="ASCII Format : " FontWeight="DemiBold" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" TextWrapping="Wrap"  Name="tblASCIIFormat" Margin="5" FontWeight="Normal" Width="500"/>
+
+                    </Grid>
+
+
+                    <Grid x:Name="gridRailcarLocomotiveMultiModalPassiveAlarm" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblCarNumber" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Car Number : " />
+                        <TextBox Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtCarNumber" IsEnabled="False"/>
+                        <TextBlock Name="lblLength" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Length (dm) : " />
+                        <TextBox Name="txtLength" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblSideIndicator" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Side Indicator : " />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtSideIndicator" IsEnabled="False"/>
+                        <TextBlock Name="lblNumberofAxles" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Number of Axles : " />
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtNumberofAxles" IsEnabled="False"/>
+                        <TextBlock Name="lblBearingType" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Bearing Type : " />
+                        <TextBox Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtBearingType" IsEnabled="False"/>
+
+                        <TextBlock Name="lblPlatformID" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Platform Identifier  : " />
+                        <TextBox Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtPlatformID" IsEnabled="False"/>
+
+                        <TextBlock Name="lblSpare" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Spare : " />
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" Name="txtSpare" IsEnabled="False"/>
+                        <TextBlock Name="lblTypeDetails"  Grid.Row="3" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Type Details : " />
+                        <TextBox Name="txtTypeDetails" Grid.Row="3" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblAlarm"  Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Alarm : " />
+                        <TextBox Name="txtAlarm" Grid.Row="4" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                    </Grid>
+                    
+                    <Grid x:Name="gridTrailer" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblTrailerNumberString" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Trailer Numer  : " />
+                        <TextBox Name="txtTrailerNumberString" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerNumber" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Trailer Number  : " />
+                        <TextBox Name="txtTrailerNumber" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerLengthCM" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Length (cm)  : " />
+                        <TextBox Name="txtTrailerLengthCM" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerWidth" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Width  : " />
+                        <TextBox Name="txtTrailerWidth" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerTandemWidth" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tandem Width  : " />
+                        <TextBox Name="txtTrailerTandemWidth" Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerTypeDetail" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Type Detail  : " />
+                        <TextBox Name="txtTrailerTypeDetail" Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerTareWeight" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tare Weight  : " />
+                        <TextBox Name="txtTrailerTareWeight" Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerHeight" Grid.Row="3" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Height  : " />
+                        <TextBox Name="txtTrailerHeight" Grid.Row="3" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblTrailerForwardExtension" Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Forward Extension  : " />
+                        <TextBox Name="txtTrailerForwardExtension" Grid.Row="4" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                    </Grid>
+                    
+                    <Grid x:Name="gridChassis" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblChassisCarNumber" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Car Number  : " />
+                        <TextBox Name="txtChassisCarNumber" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisTypeDetail" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Type Details  : " />
+                        <TextBox Name="txtChassisTypeDetail" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblChassisTareWeight" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tare Weight : " />
+                        <TextBox Name="txtChassisTareWeight" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisTandemWidth" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tandem Width  : " />
+                        <TextBox Name="txtChassisTandemWidth" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisForwardExtension" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Forward Extension : " />
+                        <TextBox Name="txtChassisForwardExtension" Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisKingPinSettin" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="King Pin Setting  : " />
+                        <TextBox Name="txtChassisKingPinSettin" Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisAxleSpacing" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Axle Spacing  : " />
+                        <TextBox Name="txtChassisAxleSpacing" Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisRunningGearLoc" Grid.Row="3" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Running Gear Loc  : " />
+                        <TextBox Name="txtChassisRunningGearLoc" Grid.Row="3" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisNumLength" Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Num Length  : " />
+                        <TextBox Name="txtChassisNumLength" Grid.Row="4" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisMinLength" Grid.Row="4" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Min Length  : " />
+                        <TextBox Name="txtChassisMinLength" Grid.Row="4" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisHeight" Grid.Row="5" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Height  : " />
+                        <TextBox Name="txtChassisHeight" Grid.Row="5" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblChassisMaxLength" Grid.Row="5" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Max Length  : " />
+                        <TextBox Name="txtChassisMaxLength" Grid.Row="5" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblChassisSpare" Grid.Row="6" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Spare  : " />
+                        <TextBox Name="txtChassisSpare" Grid.Row="6" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                    </Grid>
+                    
+                    <Grid x:Name="gridEndofTrain" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblEOTCarNumber" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Car Number  : " />
+                        <TextBox Name="txtEOTCarNumber" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblEOTType" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="EOT Type  : " />
+                        <TextBox Name="txtEOTType" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblEOTSideIndicator" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Side Indicator : " />
+                        <TextBox Name="txtEOTSideIndicator" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160" IsEnabled="False"/>
+
+                        <TextBlock Name="lblEOTSpare" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Spare : " />
+                        <TextBox Name="txtEOTSpare" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160" IsEnabled="False"/>
+                    </Grid>
+                    
+                    <Grid x:Name="gridIntermodal" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblIntermodalCarNumber" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Car Number : " />
+                        <TextBox Name="txtIntermodalCarNumber" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblIntermodalCheckDigit" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Check Digit : " />
+                        <TextBox Name="txtIntermodalCheckDigit" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblIntermodalLengthCM" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Length (CM) : " />
+                        <TextBox Name="txtIntermodalLengthCM" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblIntermodalHeight" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Height : " />
+                        <TextBox Name="txtIntermodalHeight" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblIntermodalWidth" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Width : " />
+                        <TextBox Name="txtIntermodalWidth" Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblIntermodalContainerType" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Container Type : " />
+                        <TextBox Name="txtIntermodalContainerType" Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblIntermodalMaxGrossWeight" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Max Gross Weight : " />
+                        <TextBox Name="txtIntermodalMaxGrossWeight" Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblIntermodalTareWeight" Grid.Row="3" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tare Weight : " />
+                        <TextBox Name="txtIntermodalTareWeight" Grid.Row="3" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblIntermodalSpare" Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Spare : " />
+                        <TextBox Name="txtIntermodalSpare" Grid.Row="4" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                    </Grid>
+                    
+                    <Grid x:Name="gridRailcarCover" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Name="lblRailcarCoverCarNumber" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Car Number : " />
+                        <TextBox Name="txtRailcarCoverCarNumber" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblRailcarCoverLength" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Length (dm) : " />
+                        <TextBox Name="txtRailcarCoverLength" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblRailcarCoverSideIndicator" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Side Indicator : " />
+                        <TextBox Name="txtRailcarCoverSideIndicator" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblCoverType" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Cover Type : " />
+                        <TextBox Name="txtCoverType" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblDateBuilt" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Date Built : " />
+                        <TextBox Name="txtDateBuilt" Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblInsulation" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Insulation : " />
+                        <TextBox Name="txtInsulation" Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblfitting" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Fitting : " />
+                        <TextBox Name="txtfitting" Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblAssocRailCarNumber" Grid.Row="3" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Associated Railcar # : " />
+                        <TextBox Name="txtAssocRailCarNumber" Grid.Row="3" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblAssocRailCarInitial" Grid.Row="4" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Asso. Railcar Initial : " />
+                        <TextBox Name="txtAssocRailCarInitial" Grid.Row="4" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblAssocRailCarInitialString" Grid.Row="4" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Asso. Railcar Initial : " />
+                        <TextBox Name="txtAssocRailCarInitialString" Grid.Row="4" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                    </Grid>
+                    
+                    <Grid x:Name="gridGeneratorSet" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Name="lblGeneratorSetNumberString" Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Generator Set # : " />
+                        <TextBox Name="txtGeneratorSetNumberString" Grid.Row="0" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblGeneratorSetNumber" Grid.Row="0" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Generator Set # : " />
+                        <TextBox Name="txtGeneratorSetNumber" Grid.Row="0" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblMounting" Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Mounting : " />
+                        <TextBox Name="txtMounting" Grid.Row="1" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblGeneratorSetTareWeight" Grid.Row="1" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Tare Weight : " />
+                        <TextBox Name="txtGeneratorSetTareWeight" Grid.Row="1" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblFuelCapacity" Grid.Row="2" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Fuel Capacity : " />
+                        <TextBox Name="txtFuelCapacity" Grid.Row="2" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                        <TextBlock Name="lblVoltage" Grid.Row="2" Grid.Column="2" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Voltage : " />
+                        <TextBox Name="txtVoltage" Grid.Row="2" Grid.Column="3" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+
+                        <TextBlock Name="lblGeneratorSerSpare" Grid.Row="3" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Center" Text="Spare : " />
+                        <TextBox Name="txtGeneratorSerSpare" Grid.Row="3" Grid.Column="1" Margin="5" HorizontalAlignment="Left" Width="160"  IsEnabled="False"/>
+                    </Grid>
+
+                    <Grid x:Name="gridErrorMessage" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Top" Text="Error Message : " FontWeight="DemiBold" Name="lblErrorMessage"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Name="tblErrorMessage" Margin="5" FontWeight="Normal" Foreground="Red"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Margin="5" HorizontalAlignment="Right" VerticalAlignment="Top" Text="Binary Format : " FontWeight="DemiBold" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" TextWrapping="Wrap"  Name="tblBinaryFormat" Margin="5" FontWeight="Normal" Foreground="Red" Width="500"/>
+                    </Grid>
+                </StackPanel>
+            </GroupBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Vertical" Margin="10,-7,10,10" Name="spTagInspector_GEN2" IsEnabled="True" HorizontalAlignment="Left">
+            <StackPanel.Resources>
+                <Style TargetType="{x:Type StackPanel}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=rbt14443A,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbt15693,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtngen2,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbtnata,Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Resources>
+            <GroupBox  Name="gbReservedBandk" Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Reserved Memory Bank (0)</TextBlock>
+                </GroupBox.Header>
+                <Grid Name="grid2" Width="auto" >
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Purpose :" Name="lblPrupose" />
+                    <Label Grid.Row="1" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Value (Hex) :" Name="lblValu" />
+                    <Label Grid.Row="2" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Word Address (Dec) :" Name="lblAdress" />
+
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Background="#0A000000" Name="txtKillPassword" IsEnabled="True" Width="200" Cursor="Arrow"  IsReadOnly="True" />
+                    <TextBox Grid.Row="1" Grid.Column="2" Margin="3"  Background="#0A000000" Name="txtAcessPassword" Width="200" IsReadOnly="True" IsEnabled="True" Cursor="Arrow" />
+                    <TextBox Grid.Row="1" Grid.Column="3" Margin="3" Visibility="Collapsed" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" Background="#0A000000" IsReadOnly="False" Name="txtReservedMemUnusedValue" Width="137" IsEnabled="True" VerticalScrollBarVisibility="Auto" PreviewTextInput="txtUserMemData_PreviewTextInput" FontFamily="Consolas">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <Label Grid.Row="0" Grid.Column="1" Margin="3" Content="Kill Password" HorizontalAlignment="Center" Name="lblKillPassword" />
+                    <Label Grid.Row="0" Grid.Column="2" Margin="3" Content="Access Password" HorizontalAlignment="Center"  Name="lblAcessPassword" />
+                    <Label Grid.Row="0" Grid.Column="3" Margin="3" Content="Additional Memory" Visibility="Collapsed" HorizontalAlignment="Center" Name="lblAdditionalReservedMem" />
+
+                    <Label Grid.Row="2" Grid.Column="1" Margin="3" Content="0" HorizontalAlignment="Left" Name="lblKillPasswordAdd" />
+                    <Label Grid.Row="2" Grid.Column="2" Margin="3" Content="2" HorizontalAlignment="Left" Name="lblAcessPasswordAdd" />
+                    <Label Grid.Row="2" Grid.Column="3" Margin="3" Content="4" HorizontalAlignment="Left" Name="lblAdditionalReservedMemAdd" Visibility="Collapsed" />
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Name="gbEPCBank" Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">EPC Memory Bank (1)</TextBlock>
+                </GroupBox.Header>
+                <Grid  Name="grid3" Margin="5">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Purpose :" Name="label1"/>
+                    <Label Grid.Row="1" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Value (Hex) :" Name="label2" />
+                    <Label Grid.Row="2" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Value :" Name="label6" />
+                    <Label Grid.Row="3" Grid.Column="0" HorizontalAlignment="Right" Margin="3" Content="Word Address (Dec) :" Name="label8" />
+
+                    <Label Grid.Row="0" Grid.Column="1" Margin="3" HorizontalAlignment="Center" Content="CRC" Name="label3" />
+                    <Label Grid.Row="0" Grid.Column="2" Margin="3" HorizontalAlignment="Center" Content="PC"  Name="label5" />
+                    <Label Grid.Row="0" Grid.Column="3" Margin="3"  HorizontalAlignment="Center" Content="EPC ID" Name="label4" />
+
+
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Width="70" Background="#0A000000" IsReadOnly="True" Name="txtCRC" Cursor="Arrow" IsEnabled="True" />
+                    <TextBox Grid.Row="1" Grid.Column="2" Margin="3" Width="70" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtPC"  IsEnabled="True" />
+                    <TextBox Grid.Row="1" Grid.Column="3" Margin="3" Width="334" Cursor="Arrow" Background="#0A000000" IsReadOnly="False" PreviewTextInput="txtUserMemData_PreviewTextInput" Name="txtEPCData" IsEnabled="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" PreviewKeyDown="txtEPCData_PreviewKeyDown">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" >
+                        <RadioButton Margin="3" VerticalAlignment="Center" Content="ASCII" GroupName="EpcRep" IsChecked="True" Name="rbEPCAscii" Checked="rbEPCAscii_Checked" />
+                        <RadioButton Margin="3" VerticalAlignment="Center" Content="Reverse Base 36" Height="16" GroupName="EpcRep" Name="rbEPCBase36"   Checked="rbEPCBase36_Checked" />
+                    </StackPanel>
+
+                    <TextBox Grid.Row="2" Grid.Column="3" Margin="3" Width="334" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" Background="#0A000000" IsReadOnly="False" PreviewTextInput="txtUserMemData_PreviewTextInput" Name="txtEPCValue" IsEnabled="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" VerticalContentAlignment="Center">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <Label Grid.Row="3" Grid.Column="1" Margin="3" Content="0" Name="label9" FontWeight="Normal"/>
+                    <Label Grid.Row="3" Grid.Column="2" Margin="3" Content="1" Name="label10" FontWeight="Normal"/>
+                    <Label Grid.Row="3" Grid.Column="3" Margin="3" Content="2" Name="label11" FontWeight="Normal"/>
+
+                    <StackPanel Grid.Row="0" Grid.Column="4" Grid.RowSpan="4" Orientation="Vertical" Name="spUnused" Visibility="Collapsed">
+                        <Label Margin="3" Content="Extended EPC Memory" HorizontalAlignment="Center" Name="label7" />
+                        <TextBox Margin="3" Height="27" PreviewKeyDown="txtEPCData_PreviewKeyDown" Background="#0A000000" IsReadOnly="False"  Name="txtEPCUnused" Width="137" IsEnabled="True" TextWrapping="Wrap" ForceCursor="True" Cursor="Arrow" PreviewTextInput="txtUserMemData_PreviewTextInput" VerticalScrollBarVisibility="Auto">
+                            <TextBox.CommandBindings>
+                                <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                                <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                            </TextBox.CommandBindings>
+                            <TextBox.ContextMenu>
+                                <ContextMenu Visibility="Collapsed"></ContextMenu>
+                            </TextBox.ContextMenu>
+                        </TextBox>
+                        <TextBox Margin="3" Height="27" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow"  Background="#0A000000" IsReadOnly="False" Name="txtEPCUnusedValue" Width="137" IsEnabled="True" VerticalScrollBarVisibility="Auto" PreviewTextInput="txtUserMemData_PreviewTextInput" FontFamily="Consolas">
+                            <TextBox.CommandBindings>
+                                <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                                <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                            </TextBox.CommandBindings>
+                            <TextBox.ContextMenu>
+                                <ContextMenu Visibility="Collapsed"></ContextMenu>
+                            </TextBox.ContextMenu>
+                        </TextBox>
+                        <Label Content="3" Height="28"  Margin="2" Name="lblExtdEPCMemAddress" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="5" Grid.RowSpan="4" Orientation="Vertical" Name="spXPC"  Visibility="Collapsed">
+                        <Label Margin="3" Content="XPC" HorizontalAlignment="Center" Name="lblXPC1" />
+                        <TextBox Margin="3" Height="27" Background="#0A000000" IsEnabled="True" IsReadOnly="True" Name="txtXPC1" Width="Auto" />
+                        <Label Content="" Height="24" Visibility="Hidden"  Margin="2" Name="lbl" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        <Label Content="33" Height="28"  Margin="2" Name="lblXPC1MemAddress" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                    </StackPanel>
+
+                    <StackPanel  Grid.Row="0" Grid.Column="6" Grid.RowSpan="4" Orientation="Vertical" Name="spXPC2"  Visibility="Collapsed">
+                        <Label Margin="3" Content="XPC2" HorizontalAlignment="Center" Name="lblXPC2" />
+                        <TextBox Margin="3" Height="27" Background="#0A000000" IsEnabled="True" IsReadOnly="True" Name="txtXPC2"  Width="Auto" />
+                        <Label Content="" Height="24" Visibility="Hidden"  Margin="2" Name="lblXPCUnused2" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                        <Label Content="34" Height="28"  Margin="2" Name="lblXPC2MemAddress" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="7" Grid.RowSpan="4" Orientation="Vertical" Name="spAddMemory" Visibility="Collapsed">
+                        <Label Margin="3" Content="Additional Memory" HorizontalAlignment="Center" Name="lblAdditionalMem" />
+                        <TextBox Margin="3" Height="27" PreviewKeyDown="txtEPCData_PreviewKeyDown" Background="#0A000000" IsReadOnly="False"  Name="txtAdditionalMem" Width="137" IsEnabled="True" TextWrapping="Wrap" ForceCursor="True" Cursor="Arrow" PreviewTextInput="txtUserMemData_PreviewTextInput" VerticalScrollBarVisibility="Auto">
+                            <TextBox.CommandBindings>
+                                <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                                <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                            </TextBox.CommandBindings>
+                            <TextBox.ContextMenu>
+                                <ContextMenu Visibility="Collapsed"></ContextMenu>
+                            </TextBox.ContextMenu>
+                        </TextBox>
+                        <TextBox Margin="3" Height="27" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" Background="#0A000000" IsReadOnly="False" Name="txtadditionalMemValue" Width="137" IsEnabled="True" VerticalScrollBarVisibility="Auto" PreviewTextInput="txtUserMemData_PreviewTextInput" FontFamily="Consolas">
+                            <TextBox.CommandBindings>
+                                <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                                <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                            </TextBox.CommandBindings>
+                            <TextBox.ContextMenu>
+                                <ContextMenu Visibility="Collapsed"></ContextMenu>
+                            </TextBox.ContextMenu>
+                        </TextBox>
+                        <Label Content="35" Height="28"  Margin="2" Name="lblAddMemAddress" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                    </StackPanel>
+
+                    <!--<StackPanel Orientation="Horizontal" Name="spEPCMain" Margin="235,0,0,0"  >
+                    <StackPanel Orientation="Vertical" Name="spEPCData"  HorizontalAlignment="Left" VerticalAlignment="Top" >
+                    </StackPanel>
+                </StackPanel>-->
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Name="gbTIDBank" Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">TID Memory Bank (2)</TextBlock>
+                </GroupBox.Header>
+                <Grid Name="grid4" Width="Auto" >
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Purpose :" Name="lblTIDPurpose" />
+                    <Label Grid.Row="1" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Value (Hex) :" Name="lblTIDValue" />
+                    <Label Grid.Row="2" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Meaning :" Name="label16" />
+                    <Label Grid.Row="3" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Word Address (Dec):" Name="label18" />
+
+                    <Label Grid.Row="0" Grid.Column="1" Margin="3" HorizontalAlignment="Center" Content="ClsID" Name="lblClsID" />
+                    <Label Grid.Row="0" Grid.Column="2" Margin="3" HorizontalAlignment="Center" Content="Vendor ID" Name="label15" />
+                    <Label Grid.Row="0" Grid.Column="3" Margin="3" HorizontalAlignment="Center" Content="Model ID" Name="lblVendorID" />
+                    <Label Grid.Row="0" Grid.Column="4" Margin="3" HorizontalAlignment="Center" Content="Unique ID" Name="label17" />
+
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtClsID" Width="40" IsEnabled="True"  />
+                    <TextBox Grid.Row="1" Grid.Column="2" Margin="3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtVendorID" Width="85" IsEnabled="True"  />
+                    <TextBox Grid.Row="1" Grid.Column="3" Margin="3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtModelID"  Width="101" IsEnabled="True"  />
+                    <TextBox Grid.Row="1" Grid.Column="4" Margin="3" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" Background="#0A000000" IsReadOnly="False" PreviewTextInput="txtUserMemData_PreviewTextInput" Name="txtUniqueIDValue" Width="386" IsEnabled="True"  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="True">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <TextBox Grid.Row="2" Grid.Column="2" Margin="3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtVendorValue" Width="85" IsEnabled="True"  />
+                    <TextBox Grid.Row="2" Grid.Column="3" Margin="3" Cursor="Arrow" Background="#0A000000" IsReadOnly="True" Name="txtModeldIDValue" Width="101" IsEnabled="True"  />
+
+                    <Label Grid.Row="3" Grid.Column="1" Margin="3" Content="0" Name="lblCLsIDWord" FontWeight="Normal"/>
+                    <Label Grid.Row="3" Grid.Column="4" Margin="3" Content="2" HorizontalAlignment="Left" Name="lblUniqueWord" FontWeight="Normal"/>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox  Name="gbUserBank" Background="White">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">User Memory Bank (3)</TextBlock>
+                </GroupBox.Header>
+                <Grid Name="grid5" Width="Auto" >
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Purpose :" Name="label12" />
+                    <Label Grid.Row="1" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Value (Hex) :" Name="label13" />
+                    <Label Grid.Row="2" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Value (ASCII) :" Name="label21" />
+                    <Label Grid.Row="2" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Content="Word Address (Dec):" Visibility="Hidden"/>
+
+                    <Label Grid.Row="0" Grid.Column="1" Margin="3" HorizontalAlignment="Center" Content="User Data" Name="label19" />
+
+                    <TextBox Grid.Row="1" Grid.Column="1" Margin="3" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" IsReadOnly="False" Background="#0A000000" Name="txtUserMemData" Width="620" Height="45" VerticalScrollBarVisibility="Visible" AcceptsReturn="True" TextWrapping="Wrap" PreviewTextInput="txtUserMemData_PreviewTextInput">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="3" PreviewKeyDown="txtEPCData_PreviewKeyDown" Cursor="Arrow" IsReadOnly="False" Background="#0A000000" Name="txtUserDataValue" Width="620" Height="45" VerticalScrollBarVisibility="Visible" TextWrapping="Wrap" PreviewTextInput="txtUserMemData_PreviewTextInput" FontFamily="Consolas" VerticalContentAlignment="Center">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" CanExecute="CommandBinding_CanExecute" />
+                        </TextBox.CommandBindings>
+                        <TextBox.ContextMenu>
+                            <ContextMenu Visibility="Collapsed"></ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+                </Grid>
+            </GroupBox>
+            <Label x:Name="lbltagnotfound" Visibility="Collapsed" Background="White" Foreground="Red" Margin="5" Content=" Warning : Unable to read one or more Memory Bank. Please check if the tag is in range."></Label>
+        </StackPanel>
+    </StackPanel>
+
+</UserControl>

@@ -1,4 +1,4 @@
-Date: 2011/03/18
+Date: 2023/05/12
 
 INFO: 
 =====
@@ -22,7 +22,7 @@ in the C API. And TMR_startReading() and TMR_stopReading() functions
 can be used to obtain this functionality.  To know more about this feature, 
 Please refer to the MercuryAPI document.
 
-Earlier this feature was limited to POSIX platforms, as it require a POSIX 
+Earlier this feature was limited to POSIX platforms, as it requires a POSIX 
 threads interface to compile and run. 
 
 Now, with the introduction of 'pthreads-win32' (Open-source POSIX threads 
@@ -55,11 +55,11 @@ object file library "pthreadVC2.lib" located in "src\arch\win32\lib".
 Running Sample Applications:
 ============================
 In order to run sample applications, they require "pthreadVC2.dll" runtime
-library. This DLL is can be found in "src\arch\win32\lib". It can also
+library. This DLL can be found in "src\arch\win32\lib". It can also
 be found in the downloaded pre-built image.
 
 Copy this DLL to a location where the host windows can find this at run time.
-The ideal place would be "%SystemRoot%\system32" (C:\WINDOWS\system32).
+The ideal place would be "%SystemRoot%" (C:\WINDOWS).
 
 Now, its all set to run the sample applications.
 

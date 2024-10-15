@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,11 +47,13 @@ static const char *paramNames[1 + TMR_PARAM_MAX] = {
 #endif /* TMR_ENABLE_UHF */
   "/reader/antenna/portList",  /* TMR_PARAM_ANTENNA_PORTLIST */
   "/reader/antenna/connectedPortList",  /* TMR_PARAM_ANTENNA_CONNECTEDPORTLIST */
-#ifdef TMR_ENABLE_UHF
   "/reader/antenna/portSwitchGpos",  /* TMR_PARAM_ANTENNA_PORTSWITCHGPOS */
+#ifdef TMR_ENABLE_UHF
   "/reader/antenna/settlingTimeList",  /* TMR_PARAM_ANTENNA_SETTLINGTIMELIST */
   "/reader/antenna/returnLoss", /* TMR_PARAM_ANTENNA_RETURNLOSS */
+#endif /* TMR_ENABLE_UHF */
   "/reader/antenna/txRxMap",  /* TMR_PARAM_ANTENNA_TXRXMAP */
+#ifdef TMR_ENABLE_UHF
   "/reader/antenna/perAntennaTime", /* TMR_PARAM_PER_ANTENNA_TIME */
 #endif /* TMR_ENABLE_UHF */
   "/reader/gpio/inputList",  /* TMR_PARAM_GPIO_INPUTLIST */
@@ -64,6 +66,7 @@ static const char *paramNames[1 + TMR_PARAM_MAX] = {
   "/reader/gen2/target",  /* TMR_PARAM_GEN2_TARGET */
   "/reader/gen2/BLF",  /* TMR_PARAM_GEN2_BLF */
   "/reader/gen2/tari",  /* TMR_PARAM_GEN2_TARI */
+  "/reader/gen2/rfMode", /* TMR_PARAM_GEN2_RFMODE */
   "/reader/gen2/writeMode",/*TMR_PARAM_GEN2_WRITEMODE*/
   "/reader/gen2/bap",  /* TMR_PARAM_GEN2_BAP */
   "/reader/gen2/initQ", /* TMR_PARAM_GEN2_INITIAL_Q */
@@ -76,9 +79,6 @@ static const char *paramNames[1 + TMR_PARAM_MAX] = {
   "/reader/read/asyncOffTime",  /* TMR_PARAM_READ_ASYNCOFFTIME */
   "/reader/read/asyncOnTime",  /* TMR_PARAM_READ_ASYNCONTIME */
   "/reader/read/plan",  /* TMR_PARAM_READ_PLAN */
-#ifdef TMR_ENABLE_UHF
-  "/reader/radio/enablePowerSave", /* TMR_PARAM_RADIO_ENABLEPOWERSAVE */
-#endif /* TMR_ENABLE_UHF */
   "/reader/radio/powerMax",  /* TMR_PARAM_RADIO_POWERMAX */
   "/reader/radio/powerMin",  /* TMR_PARAM_RADIO_POWERMIN */
   "/reader/radio/readPower",  /* TMR_PARAM_RADIO_READPOWER */
@@ -90,7 +90,6 @@ static const char *paramNames[1 + TMR_PARAM_MAX] = {
   "/reader/radio/temperature",  /* TMR_PARAM_RADIO_TEMPERATURE */
 #ifdef TMR_ENABLE_UHF
   "/reader/tagReadData/recordHighestRssi",  /* TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI */
-  "/reader/tagReadData/reportRssiInDbm",  /* TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM */
   "/reader/tagReadData/uniqueByAntenna",  /* TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA */
   "/reader/tagReadData/uniqueByData",  /* TMR_PARAM_TAGREADDATA_UNIQUEBYDATA */
 #endif /* TMR_ENABLE_UHF */
@@ -117,7 +116,6 @@ static const char *paramNames[1 + TMR_PARAM_MAX] = {
   "/reader/userConfig",  /* TMR_PARAM_USER_CONFIG */
 #ifdef TMR_ENABLE_UHF
   "/reader/radio/enableSJC", /* TMR_PARAM_RADIO_ENABLESJC */
-  "/reader/extendedEpc", /* TMR_PARAM_EXTENDEDEPC */
   "/reader/statistics", /* TMR_PARAM_READER_STATISTICS */
 #endif /* TMR_ENABLE_UHF */
   "/reader/stats", /* TMR_PARAM_READER_STATS */

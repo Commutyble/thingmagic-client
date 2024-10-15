@@ -6,7 +6,7 @@
  */
 
  /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -52,7 +52,7 @@ TMR_Status restart_reading(struct TMR_Reader *reader);
 
 static void *do_background_reads(void *arg);
 static void *parse_tag_reads(void *arg);
-void process_async_response(TMR_Reader *reader);
+TMR_Status process_async_response(TMR_Reader *reader);
 
 bool isBufferOverFlow = false;
 #endif /* TMR_ENABLE_BACKGROUND_READS */
@@ -77,78 +77,22 @@ TMR_startReading(struct TMR_Reader *reader)
   
   TMR_paramGet(reader, TMR_PARAM_READ_ASYNCONTIME, &ontime);
   reader->continuousReading = true; 
-  if (
-#ifdef TMR_ENABLE_UHF
-	  (((isM6eFamily(&reader->u.serialReader)) && (reader->readParams.asyncOffTime == 0 || 
-      (reader->readParams.asyncOffTime != 0 &&
-	  (reader->featureFlags & TMR_READER_FEATURES_FLAG_DUTY_CYCLE)))) ||
-      (TMR_SR_MODEL_M3E == reader->u.serialReader.versionInfo.hardware[0])) &&
-#endif /* TMR_ENABLE_UHF*/
-      ((TMR_READ_PLAN_TYPE_SIMPLE == reader->readParams.readPlan->type) ||
-      ((TMR_READ_PLAN_TYPE_MULTI == reader->readParams.readPlan->type)))
-    )
-  {
-	if (reader->readParams.asyncOffTime == 0)
-	{
-		reader->dutyCycle = false;
-	}
-	else
-	{
-		reader->dutyCycle = true;
-	}
-  }
-  else
-  {
-	reader->dutyCycle = false;
-  }
+  
   ret = TMR_read(reader, ontime, NULL);
   if(TMR_SUCCESS != ret)
-	return ret;
-	 
+  {
+    return ret;
+  }
+
 #else
 #ifdef TMR_ENABLE_BACKGROUND_READS
   int ret;
-  bool createParser = true;
 
   if (TMR_READER_TYPE_SERIAL == reader->readerType)
   {
-#ifdef TMR_ENABLE_SERIAL_READER
-    /**
-	  * if model is M6e and it's variant
-	  * asyncOffTime == 0
-	  * only then use streaming
-	  */
-  if (
-#ifdef TMR_ENABLE_UHF
-	  (((isM6eFamily(&reader->u.serialReader)) && (reader->readParams.asyncOffTime == 0 || 
-      (reader->readParams.asyncOffTime != 0 &&
-	  (reader->featureFlags & TMR_READER_FEATURES_FLAG_DUTY_CYCLE)))) ||
-	  (TMR_SR_MODEL_M3E == reader->u.serialReader.versionInfo.hardware[0])) &&
-#endif /* TMR_ENABLE_UHF*/
-      ((TMR_READ_PLAN_TYPE_SIMPLE == reader->readParams.readPlan->type) ||
-      ((TMR_READ_PLAN_TYPE_MULTI == reader->readParams.readPlan->type)))
-    )
-    {
-		if (reader->readParams.asyncOffTime == 0)
-		{
-			reader->dutyCycle = false;
-		}
-		else
-		{
-			reader->dutyCycle = true;
-		}
-    }
-    else
-    {
-      createParser = false;
-	  reader->dutyCycle = false;
-    }
 #ifdef TMR_ENABLE_UHF
     multiReadAsyncCount++;
-#endif /* TMR_ENABLE_UHF */
-#else
-    return TMR_ERROR_UNSUPPORTED;
-#endif/* TMR_ENABLE_SERIAL_READER */    
+#endif /* TMR_ENABLE_UHF */ 
   }
 #ifdef TMR_ENABLE_LLRP_READER
   if (TMR_READER_TYPE_LLRP == reader->readerType)
@@ -176,18 +120,17 @@ TMR_startReading(struct TMR_Reader *reader)
   pthread_cond_broadcast(&reader->readCond);
   pthread_mutex_unlock(&reader->backgroundLock);
 
-  if (true == createParser)
-  {
-    /** Background parser thread initialization
-     *
-     * Only M6e supports Streaming, and in case of other readers
-     * we still use pseudo-async mechanism for continuous read.
-     * To achieve continuous reading, create a parser thread
-     */
-    pthread_mutex_lock(&reader->parserLock);
+
+  /** Background parser thread initialization
+   *
+   * Only M6e supports Streaming, and in case of other readers
+   * we still use pseudo-async mechanism for continuous read.
+   * To achieve continuous reading, create a parser thread
+   */
+  pthread_mutex_lock(&reader->parserLock);
     
-    if (false == reader->parserSetup)
-    {
+  if (false == reader->parserSetup)
+  {
       ret = pthread_create(&reader->backgroundParser, NULL,
                        parse_tag_reads, reader);
       if (0 != ret)
@@ -205,17 +148,17 @@ TMR_startReading(struct TMR_Reader *reader)
       sem_init(&reader->queue_length, 0, 0);
       sem_init(&reader->queue_slots, 0, TMR_MAX_QUEUE_SLOTS);
       reader->parserSetup = true;
-    }
-
-    reader->parserEnabled = true;
-
-
-    /* Enable streaming */
-    reader->continuousReading = true;
-    reader->finishedReading = false;
-    pthread_cond_signal(&reader->parserCond);
-    pthread_mutex_unlock(&reader->parserLock);
   }
+
+  reader->parserEnabled = true;
+
+
+  /* Enable streaming */
+  reader->continuousReading = true;
+  reader->finishedReading = false;
+  pthread_cond_signal(&reader->parserCond);
+  pthread_mutex_unlock(&reader->parserLock);
+
 
   /* Background reader thread initialization */
   pthread_mutex_lock(&reader->backgroundLock);
@@ -288,7 +231,7 @@ reset_continuous_reading(struct TMR_Reader *reader)
 #endif /*SINGLE_THREAD_ASYNC_READ*/
     /* disable streaming */
     reader->continuousReading = false;
-    reader->dutyCycle = false;
+    reader->paramWait = false;
   }
 }
 
@@ -317,13 +260,7 @@ TMR_stopReading(struct TMR_Reader *reader)
   /* Check if background setup is active */
   pthread_mutex_lock(&reader->backgroundLock);
 
-  if (false == reader->backgroundSetup)
-  {
-    pthread_mutex_unlock(&reader->backgroundLock);
-    return TMR_SUCCESS;
-  }
-
-  if (false == reader->searchStatus)
+  if ((false == reader->backgroundSetup) || (false == reader->searchStatus))
   {
     /**
      * searchStatus is false, i.e., reading is already
@@ -332,6 +269,7 @@ TMR_stopReading(struct TMR_Reader *reader)
     pthread_mutex_unlock(&reader->backgroundLock);
     return TMR_SUCCESS;
   }
+
   /**
    * Else, read is in progress. Set
    * searchStatus to false;
@@ -346,7 +284,7 @@ TMR_stopReading(struct TMR_Reader *reader)
   while (TMR_READ_STATE_STARTING == reader->readState)
   {
     pthread_cond_wait(&reader->readCond, &reader->backgroundLock);
-    }
+  }
   pthread_mutex_unlock(&reader->backgroundLock);
 
   if ((true == reader->continuousReading) && (true == reader->trueAsyncflag))
@@ -478,43 +416,47 @@ notify_stats_listeners(TMR_Reader *reader, TMR_Reader_StatsValues *stats)
 TMR_Status 
 restart_reading(struct TMR_Reader *reader)
 {
-	TMR_Status ret = TMR_SUCCESS;
+  TMR_Status ret = TMR_SUCCESS;
 
-	if (NULL == reader)
-	{
-		return TMR_ERROR_INVALID;
-	}
-	//Stop continuous reading
-	ret = TMR_stopReading(reader);
-	if(ret != TMR_SUCCESS)
-	{
-		return ret;
-	}
+  //Access reader pointer only if it is not Null
+  if (NULL == reader)
+  {
+    return TMR_ERROR_INVALID;
+  }
 
-	#ifdef SINGLE_THREAD_ASYNC_READ
-	//Receive all tags from the previous reading
-	{
-		TMR_TagReadData trd;
+  //Stop continuous reading
+  ret = TMR_stopReading(reader);
+  if(ret != TMR_SUCCESS)
+  {
+    return ret;
+  }
 
-                TMR_TRD_init(&trd);
-		while(true)
-		{
-			ret = TMR_hasMoreTags(reader);
-			if (TMR_SUCCESS == ret)
-			{
-				TMR_getNextTag(reader, &trd);
-				notify_read_listeners(reader, &trd);
-			}
-			else if(ret == TMR_ERROR_END_OF_READING)
-			break;
-		}
-	}
-	#endif
-	//Restart reading
-	ret = TMR_startReading(reader);
+#ifdef SINGLE_THREAD_ASYNC_READ
+  //Receive all tags from the previous reading
+  {
+    TMR_TagReadData trd;
+    
+    TMR_TRD_init(&trd);
+    while(true)
+    {
+      ret = TMR_hasMoreTags(reader);
+      if (TMR_SUCCESS == ret)
+      {
+        TMR_getNextTag(reader, &trd);
+        notify_read_listeners(reader, &trd);
+      }
+      else if(ret == TMR_ERROR_END_OF_READING)
+        break;
+    }
+  }
+#endif
 
-	return ret;
+  //Restart reading
+  ret = TMR_startReading(reader);
+
+  return ret;
 }
+
 #ifdef TMR_ENABLE_UHF
 #ifdef TMR_ENABLE_BACKGROUND_READS
 /* NOTE: There is only one auth object for all the authreq listeners, so whichever listener touches it last wins.
@@ -563,7 +505,6 @@ TMR_addReadExceptionListener(TMR_Reader *reader,
   return TMR_SUCCESS;
 }
 
-#ifdef TMR_ENABLE_UHF
 #ifdef TMR_ENABLE_BACKGROUND_READS
 TMR_Status
 TMR_removeReadExceptionListener(TMR_Reader *reader,
@@ -601,7 +542,6 @@ TMR_removeReadExceptionListener(TMR_Reader *reader,
   return TMR_SUCCESS;
 }
 #endif
-#endif /* TMR_ENABLE_UHF */
 
 void
 notify_exception_listeners(TMR_Reader *reader, TMR_Status status)
@@ -684,7 +624,6 @@ parse_tag_reads(void *arg)
     {
       pthread_cond_wait(&reader->parserCond, &reader->parserLock);
     }
-
     reader->parserRunning = true;
     pthread_mutex_unlock(&reader->parserLock);
 
@@ -704,7 +643,6 @@ parse_tag_reads(void *arg)
       if (false == tagRead->isStatusResponse)
       {
         /* Tag Buffer stream response */
-
 #ifdef TMR_ENABLE_SERIAL_READER          
         if (TMR_READER_TYPE_SERIAL == reader->readerType)
         {
@@ -761,27 +699,20 @@ parse_tag_reads(void *arg)
           }
         }
 #endif
-        }
+      }
       else
       {
-       /* A status stream response */
-
         if (TMR_READER_TYPE_SERIAL == reader->readerType)
         {
           TMR_Reader_StatsValues stats;
           uint8_t offset;
 #ifdef TMR_ENABLE_UHF
-          uint8_t i,j;
+          uint16_t flags = 0;
 #endif /* TMR_ENABLE_UHF */
-          uint16_t flags = 0;                 
 
           offset = tagRead->bufPointer;
-#ifdef TMR_ENABLE_UHF
-          if(isMultiSelectEnabled)
-          {
-            offset++;
-          }
 
+#ifdef TMR_ENABLE_UHF
           TMR_STATS_init(&stats);
 
           if (NULL != reader->statusListeners && NULL== reader->statsListeners)
@@ -791,6 +722,10 @@ parse_tag_reads(void *arg)
             uint8_t index = 0, j;
             TMR_SR_StatusReport report[TMR_SR_STATUS_MAX];
 
+            if (isMultiSelectEnabled)
+            {
+              offset++;
+            }
 
             /* Get status content flags */
             flags = GETU16(tagRead->tagEntry.sMsg, offset);
@@ -801,22 +736,23 @@ parse_tag_reads(void *arg)
               report[index].u.fsr.freq = (uint32_t)(GETU24(tagRead->tagEntry.sMsg, offset));
               index ++;
             }
+
             if (0 != (flags & TMR_SR_STATUS_TEMPERATURE))
             {
               report[index].type = TMR_SR_STATUS_TEMPERATURE;
               report[index].u.tsr.temp = GETU8(tagRead->tagEntry.sMsg, offset);
               index ++;
             }
+
             if (0 != (flags & TMR_SR_STATUS_ANTENNA))
             {
-              uint8_t tx, rx;
+              uint8_t antId;
               report[index].type = TMR_SR_STATUS_ANTENNA;
-              tx = GETU8(tagRead->tagEntry.sMsg, offset);
-              rx = GETU8(tagRead->tagEntry.sMsg, offset);
+              antId = GETU8(tagRead->tagEntry.sMsg, offset);
 
               for (j = 0; j < reader->u.serialReader.txRxMap->len; j++)
               {
-                if ((rx == reader->u.serialReader.txRxMap->list[j].rxPort) && (tx == reader->u.serialReader.txRxMap->list[j].txPort))
+                if (antId == reader->u.serialReader.txRxMap->list[j].txPort)
                 {
                   report[index].u.asr.ant = reader->u.serialReader.txRxMap->list[j].antenna;
                   break;
@@ -835,76 +771,14 @@ parse_tag_reads(void *arg)
               slb = slb->next;
             }
             pthread_mutex_unlock(&reader->listenerLock);
-
           }
           else if (NULL != reader->statsListeners && NULL== reader->statusListeners)
 #else
           if (NULL != reader->statsListeners)
 #endif /* TMR_ENABLE_UHF */
           {
-            /* Get stats content flags */
-            if ((0x80) > reader->statsFlag)
-            {
-              offset += 1;
-            }
-            else if ((0x4000) > reader->statsFlag)
-            {
-              offset += 2;
-            }
-            else
-            {
-              offset += 3;
-            }
-
-#ifdef TMR_ENABLE_UHF
-            /**
-             * preinitialize the rf ontime and the noise floor value to zero
-             * berfore getting the reader stats
-             */
-            for (i = 0; i < stats.perAntenna.max; i++)
-            {
-              stats.perAntenna.list[i].antenna = 0;
-              stats.perAntenna.list[i].rfOnTime = 0;
-              stats.perAntenna.list[i].noiseFloor = 0;
-            }
-#endif /* TMR_ENABLE_UHF */
-
-            TMR_fillReaderStats(reader, &stats, flags, tagRead->tagEntry.sMsg, offset);
-#ifdef TMR_ENABLE_UHF
-            /**
-             * iterate through the per antenna values,
-             * If found  any 0-antenna rows, copy the
-             * later rows down to compact out the empty space.
-             */
-            for (i = 0; i < reader->u.serialReader.txRxMap->len; i++)
-            {
-              if (!stats.perAntenna.list[i].antenna)
-              {
-                for (j = i + 1; j < reader->u.serialReader.txRxMap->len; j++)
-                {
-                  if (stats.perAntenna.list[j].antenna)
-                  {
-                    stats.perAntenna.list[i].antenna = stats.perAntenna.list[j].antenna;
-                    stats.perAntenna.list[i].rfOnTime = stats.perAntenna.list[j].rfOnTime;
-                    stats.perAntenna.list[i].noiseFloor = stats.perAntenna.list[j].noiseFloor;
-                    stats.perAntenna.list[j].antenna = 0;
-                    stats.perAntenna.list[j].rfOnTime = 0;
-                    stats.perAntenna.list[j].noiseFloor = 0;
-
-                    stats.perAntenna.len++;
-                    break;
-                  }
-                }
-              }
-              else
-              {
-                /* Increment the length */
-                stats.perAntenna.len++;
-              }
-            }
-#endif /* TMR_ENABLE_UHF */
-            /* store the requested flags for future use */
-            stats.valid = reader->statsFlag;
+            /* A stats stream response */
+            TMR_parseTagStats(reader, &stats, tagRead->tagEntry.sMsg, offset);
 
             /* notify status response to listener */
 	        TMR_DEBUG("%s", "Calling notify_stats_listeners");
@@ -952,6 +826,7 @@ parse_tag_reads(void *arg)
         }
 #endif
       }
+
       /* Free the memory */
       if (TMR_READER_TYPE_SERIAL == reader->readerType)
       {
@@ -963,25 +838,28 @@ parse_tag_reads(void *arg)
       	TMR_LLRP_freeMessage(tagRead->tagEntry.lMsg);
       }
 #endif
+
       free(tagRead);
 
       /* Now, increment the queue_slots as we have removed one entry */
       sem_post(&reader->queue_slots);
     }
   }
+
   return NULL;
 }
 
 
-void
+TMR_Status
 process_async_response(TMR_Reader *reader)
 {
+  TMR_Status ret = TMR_SUCCESS;
   TMR_Queue_tagReads *tagRead;
   uint16_t flags = 0;
 
   if (NULL == reader)
   {
-    return;
+    return ret;
   }
   /* Decrement Queue slots */
   sem_wait(&reader->queue_slots);
@@ -1022,21 +900,29 @@ process_async_response(TMR_Reader *reader)
       {
         flags = GETU16AT(tagRead->tagEntry.sMsg, 8);
       }
-      TMR_SR_parseMetadataFromMessage(reader, &tagRead->trd, flags, &tagRead->bufPointer, tagRead->tagEntry.sMsg);
-      TMR_SR_postprocessReaderSpecificMetadata(&tagRead->trd, &reader->u.serialReader);
-      tagRead->trd.reader = reader;
+      ret = TMR_SR_parseMetadataFromMessage(reader, &tagRead->trd, flags, &tagRead->bufPointer, tagRead->tagEntry.sMsg);
+      if (ret == TMR_SUCCESS)
+      {
+        TMR_SR_postprocessReaderSpecificMetadata(&tagRead->trd, &reader->u.serialReader);
+        tagRead->trd.reader = reader;
+      }
     }
   }
 
-  /* Enqueue the tagRead into Queue */
-  enqueue(reader, tagRead);
-  /* Increment queue_length */
-  sem_post(&reader->queue_length);
+  if (ret == TMR_SUCCESS)
+  {
+    /* Enqueue the tagRead into Queue */
+    enqueue(reader, tagRead);
+    /* Increment queue_length */
+    sem_post(&reader->queue_length);
+  }
 
   if ((false == reader->isStatusResponse) && (TMR_READER_TYPE_SERIAL == reader->readerType))
   {
     reader->u.serialReader.tagsRemainingInBuffer--;
   }
+
+  return ret;
 }
 
 static void *
@@ -1044,9 +930,13 @@ do_background_reads(void *arg)
 {
   TMR_Status ret;
   TMR_Reader *reader;
-  uint32_t onTime, offTime;
+  uint32_t onTime;
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
+  uint32_t offTime;
   int32_t sleepTime;
   uint64_t end, now, difftime;
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+  bool threadCanceled = false;
 
   reader = arg;
   reader->trueAsyncflag = false;
@@ -1069,10 +959,13 @@ do_background_reads(void *arg)
          * thread is no more, required,
          * hence, making it terminated
          **/ 
-        goto EXIT;
+        threadCanceled = true;
+        break;
       }
     }
 
+    if(!threadCanceled)
+    {
     if ((TMR_READER_TYPE_LLRP != reader->readerType)
 #ifdef TMR_ENABLE_LLRP_READER
         || (!(reader->u.llrpReader.featureFlags & TMMP_READER_FEATURES_FLAG_PERANTENNA_ONTIME))
@@ -1085,12 +978,17 @@ do_background_reads(void *arg)
     if (!reader->trueAsyncflag)
     {
       reader->fetchTagReads = true;
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
       reader->tagFetchTime = 0;
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+
       ret = TMR_read(reader, onTime, NULL);
       if (TMR_SUCCESS != ret)
       {
-        if ((TMR_ERROR_TIMEOUT == ret) || (TMR_ERROR_CRC_ERROR == ret) ||
-              (TMR_ERROR_SYSTEM_UNKNOWN_ERROR == ret) || (TMR_ERROR_TM_ASSERT_FAILED == ret))
+        /* Report an exception. */
+        notify_exception_listeners(reader, ret);
+
+        if ((TMR_ERROR_TIMEOUT == ret) || (TMR_ERROR_CRC_ERROR == ret))
         {
           if (TMR_READER_TYPE_SERIAL == reader->readerType)
           {
@@ -1098,25 +996,7 @@ do_background_reads(void *arg)
           }
           reader->backgroundEnabled = false;
         }
-#ifdef TMR_ENABLE_UHF
-        /**
-         * M5e and its variants hardware does not have a real PA protection.So, doing the read with out
-         * antenna may cause the damage to the reader.
-         *
-         * it's okay to let M6e and its variants continue to operate because it has a PA protection mechanism.
-         **/
-        if (((TMR_ERROR_HIGH_RETURN_LOSS == ret) || (TMR_ERROR_NO_ANTENNA == ret))
-			&& (isNotM6eFamily(&reader->u.serialReader) 
-			&& (TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])))
-        {
-          reader->backgroundEnabled = false;
-          reader->readState = TMR_READ_STATE_DONE;
-          pthread_mutex_unlock(&reader->backgroundLock);
-          notify_exception_listeners(reader, ret);
-          break;
-        }
-#endif /* TMR_ENABLE_UHF */
-        notify_exception_listeners(reader, ret);
+
         if(false == reader->searchStatus)
         {
           /**
@@ -1131,8 +1011,11 @@ do_background_reads(void *arg)
         }
         pthread_mutex_unlock(&reader->backgroundLock);
 
-        if(TMR_ERROR_CMDLEN_EXCEED_LIMIT == ret)
+        if((TMR_ERROR_CMDLEN_EXCEED_LIMIT == ret) ||
+           (TMR_ERROR_SYSTEM_UNKNOWN_ERROR == ret) || 
+           (TMR_ERROR_TM_ASSERT_FAILED == ret))
         {
+          /* Terminate the thread. */
           reader->backgroundEnabled = false;
           reader->readState = TMR_READ_STATE_DONE;
         }
@@ -1141,6 +1024,7 @@ do_background_reads(void *arg)
           continue;
         }
       }
+
       if(reader->continuousReading)
       {
         /**
@@ -1160,7 +1044,9 @@ do_background_reads(void *arg)
     reader->backgroundRunning = true;
     pthread_mutex_unlock(&reader->backgroundLock);
 
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
     if (true == reader->continuousReading)
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
     {
       /**  
        * Streaming is enabled only in case of M6e, 
@@ -1210,7 +1096,7 @@ do_background_reads(void *arg)
                   isBufferOverFlow = true;
                   ret = TMR_ERROR_BUFFER_OVERFLOW;
                   notify_exception_listeners(reader, ret);
-                  ret = verifySearchStatus(reader);
+                  ret = TMR_stopStreaming(reader);
                   /*isBufferOverFlow = false;
                   pthread_mutex_lock(&reader->backgroundLock);
                   reader->backgroundEnabled = false;
@@ -1224,7 +1110,19 @@ do_background_reads(void *arg)
 					  tmr_sleep(20);
 					  semret = sem_getvalue(&reader->queue_slots, &slotsFree);
 				  }
-				  reader->trueAsyncflag = false;
+
+                  reader->trueAsyncflag = false;
+
+                  /* searchStatus variable is made 1 only in TMR_startReading(). 
+                   * Make it true before reinitiating the read internally.
+                   */
+                  reader->searchStatus = true;
+
+                  /* tagsRemainingInBuffer flag is decremented to 0 in process_async_response(), 
+                   * which is not called when buffer overflow occurs.
+                   * Therefore, decrement the variable before reinitiating the read internally.
+                   */
+                  reader->u.serialReader.tagsRemainingInBuffer--;
                   break;
                 }
               }
@@ -1232,7 +1130,12 @@ do_background_reads(void *arg)
           }
 
           /* There is place to store the response. Post it */
-          process_async_response(reader);
+          ret = process_async_response(reader);
+          if (ret != TMR_SUCCESS)
+          {
+            //Error received? Report to the user.
+            notify_exception_listeners(reader, ret);
+          }
         }
         else if (TMR_ERROR_CRC_ERROR == ret)
         {
@@ -1267,28 +1170,31 @@ do_background_reads(void *arg)
         }
         else
         {
-          if ((TMR_ERROR_TIMEOUT == ret) || (TMR_ERROR_SYSTEM_UNKNOWN_ERROR == ret) || 
-                (TMR_ERROR_TM_ASSERT_FAILED == ret) || (TMR_ERROR_LLRP_READER_CONNECTION_LOST == ret))
+          if ((TMR_ERROR_TIMEOUT == ret) ||
+              (TMR_ERROR_LLRP_READER_CONNECTION_LOST == ret) ||
+              (TMR_ERROR_SYSTEM_UNKNOWN_ERROR == ret) ||
+              (TMR_ERROR_TM_ASSERT_FAILED == ret))
           {
             notify_exception_listeners(reader, ret);
+
             /** 
-             * In case of timeout error or CRC error, flush the transport buffer.
+             * Flush the transport buffer.
              * this avoids receiving of junk response.
              */
             if (TMR_READER_TYPE_SERIAL == reader->readerType)
             {
               /* Handling this fix for serial reader now */
-		          reader->u.serialReader.transport.flush(&reader->u.serialReader.transport);
+              reader->u.serialReader.transport.flush(&reader->u.serialReader.transport);
             }
 
             /**
              * Check if reading is finished.
              * If not, send stop command.
              **/
-            if (!reader->finishedReading)
-            {
-              reader->cmdStopReading(reader);
-            }
+            //if (!reader->finishedReading)
+            //{
+            //  reader->cmdStopReading(reader);
+            //}
 
             pthread_mutex_lock(&reader->backgroundLock);
             reader->backgroundEnabled = false;
@@ -1339,17 +1245,10 @@ do_background_reads(void *arg)
         }
       }
     }
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
     else
     {
-      /** 
-       * On M5e and its variants, streaming is not supported
-       * So still, retain the pseudo-async mechanism
-       * Also, when asyncOffTime is non-zero the API should fallback to 
-       * pseudo async mode.
-       */
-
       end = tmr_gettime();
-
       while (TMR_SUCCESS == TMR_hasMoreTags(reader))
       {
         TMR_TagReadData trd;
@@ -1399,7 +1298,9 @@ do_background_reads(void *arg)
         offTime = 0;
       }
     }
-EXIT:
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+    }
+
     if (reader->backgroundThreadCancel)
     {
       /**
@@ -1721,6 +1622,7 @@ do_background_receiveAutonomousReading(void * arg)
       TMR_SR_updateBaseTimeStamp(reader);
       reader->u.serialReader.isBasetimeUpdated = true;
     }
+
     ret = TMR_SR_receiveAutonomousReading(reader, &trd, &stats);
     if (TMR_SUCCESS == ret)
     {
@@ -1731,11 +1633,12 @@ do_background_receiveAutonomousReading(void * arg)
       }
       else
       {
-	TMR_DEBUG("%s", "Calling notify_stats_listeners");
+        TMR_DEBUG("%s", "Calling notify_stats_listeners");
         notify_stats_listeners(reader, &stats);
       }
     }
   }
+
   return NULL;
 }
 #endif /* TMR_ENABLE_BACKGROUND_READS */

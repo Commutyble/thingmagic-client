@@ -192,7 +192,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -394,25 +398,6 @@ int main(int argc, char *argv[])
     checkerr(rp, ret, 1, "setting region");  
   }
 #ifdef TMR_ENABLE_UHF
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
-
   //Use first antenna for operation
   if (NULL != antennaList)
   {
@@ -591,20 +576,25 @@ void parseSensorData(SensorData *sensorStatus, uint32_t sensorData)
 
   //MSW parsing:
   //MSW Bit 0
-  sensorStatus->lowBatteryAlarmStatus = (LowBatteryAlarm)(sensorDataMSW >> 15);
+  sensorStatus->lowBatteryAlarmStatus = (LowBatteryAlarm)(sensorDataMSW & (1 << 15));
   //MSW Bit 1
-  sensorStatus->auxAlarmStatus = (AuxAlarm)(sensorDataMSW >> 14);
+  sensorStatus->auxAlarmStatus = (AuxAlarm)(sensorDataMSW & (1 << 14));
   //MSW Bit 2
-  sensorStatus->overTempAlarmStatus = (OverTempAlarm)(sensorDataMSW >> 13);
+  sensorStatus->overTempAlarmStatus = (OverTempAlarm)(sensorDataMSW & (1 << 13));
   //MSW Bit 3
-  sensorStatus->underTempAlarmStatus = (UnderTempAlarm)(sensorDataMSW >> 12);
+  sensorStatus->underTempAlarmStatus = (UnderTempAlarm)(sensorDataMSW & (1 << 12));
   //MSW Bit 4
-  sensorStatus->p3InputStatus = (P3Input)(sensorDataMSW >> 11);
+  sensorStatus->p3InputStatus = (P3Input)(sensorDataMSW & (1 << 11));
   //MSW Bit 5
-  sensorStatus->monitorEnabledStatus = (MonitorEnabled)(sensorDataMSW >> 10);
+  sensorStatus->monitorEnabledStatus = (MonitorEnabled)(sensorDataMSW & (1 << 10));
   //MSW Bit 6 always 0.
   //MSW Bit 7 - F (9 bits) for Temperature
-  sensorStatus->temperature = (uint16_t)((sensorDataMSW & 0x1ff) * 0.25);
+  if ((sensorDataMSW & 0x1ff) == 0x100){
+    sensorStatus->temperature = 0x100;  //Invalid Measurement
+  }
+  else {
+    sensorStatus->temperature = (uint16_t)((sensorDataMSW & 0x1ff) * 0.25);
+  }
 
   //LSW parsing:
   //LSW Bits 0 - 5 
@@ -644,7 +634,12 @@ void displaySensorData(SensorData *sensorData)
   sensorData->monitorEnabledStatus ? printf("ENABLED\n") : printf("DISABLED\n");
 
   //Temperature.
-  printf("\t      Temperature             = %d C\n", sensorData->temperature);
+  if (sensorData->temperature == 0x100) {
+    printf("\t      Temperature             = Invalid Measurement\n");
+  }
+  else {
+    printf("\t      Temperature             = %d C \n", sensorData->temperature);
+  }
 
   //AbortedTemperatureCount.
   printf("\t      AbortedTemperatureCount = %d\n", sensorData->abortedTemperatureCount);

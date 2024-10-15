@@ -7,7 +7,7 @@
 
 
 /*
- * Copyright (c) 2010 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -80,7 +80,7 @@ s_open(TMR_SR_SerialTransport *this)
   GetCommState(c->handle, &dcb);
   dcb.fOutxCtsFlow = 0;
   dcb.fOutxDsrFlow = 0;
-  dcb.fDtrControl = DTR_CONTROL_DISABLE;
+  dcb.fDtrControl = DTR_CONTROL_ENABLE;
   dcb.fDsrSensitivity = 0;
   dcb.fOutX = 0;
   dcb.fInX = 0;

@@ -1,6 +1,6 @@
 /**
  * Sample program that shows GPIO operations.
- * @file gpioCommands.c
+ * @file gpiocommands.c
  */
 
 #include <tm_reader.h>

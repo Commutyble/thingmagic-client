@@ -6,16 +6,21 @@
 # Note multiple versions, each one for a different version of the .NET framework
 # v3.5 is capable of building older v2.0 projects, but I'm afraid of accidentally
 # introducing forward dependencies on the 3.5 framework.
+
 ifdef STUB_MSBUILDS
-MSBUILD2 ?= echo MSBUILD
-MSBUILD3 ?= echo MSBUILD
-MSBUILD4 ?= echo MSBUILD
+#MSBUILD2 ?= echo MSBUILD
+#MSBUILD3 ?= echo MSBUILD
+#MSBUILD4 ?= echo MSBUILD
 VCBUILD8 ?= echo VCBUILD
+MSBUILD22 ?= echo MSBUILD
 else
-MSBUILD2 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v2.0.50727/MSBuild.exe"
-MSBUILD3 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v3.5/MSBuild.exe"
-MSBUILD4 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v4.0.30319/MSBuild.exe"
+#MSBUILD2 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v2.0.50727/MSBuild.exe"
+#MSBUILD3 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v3.5/MSBuild.exe"
+#MSBUILD4 ?= "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v4.0.30319/MSBuild.exe"
 VCBUILD8 ?= "/cygdrive/c/Program Files/Microsoft Visual Studio 8/vc/vcpackages/vcbuild.exe"
+
+#MSBuild for visual studio 2022
+MSBUILD22 ?= "/cygdrive/c/Program Files/Microsoft Visual Studio/2022/Professional/MSBuild/Current/Bin/MSBuild.exe"
 endif
 
 
@@ -24,8 +29,8 @@ VCBUILDPATH ?= "/cygdrive/c/Program Files/Microsoft Visual Studio 8/VC/vcpackage
 
 default: Release/MercuryAPI.lib
 
-Release/MercuryAPI.lib: MercuryAPI.sln MercuryAPI.vcproj
-	$(MSBUILD2) /t:Rebuild /p:Configuration=Release MercuryAPI.sln
+Release/MercuryAPI.lib: MercuryAPI.sln MercuryAPI.vcxproj
+	$(MSBUILD22) /t:Rebuild /p:Configuration=Release MercuryAPI.sln
 clean:
 	rm -fr Release/MercuryAPI.dll
 
@@ -58,4 +63,4 @@ clean:
 
 # "/cygdrive/c/WINDOWS/Microsoft.NET/Framework/v2.0.50727/MSBuild.exe" /t:Build /p:Configuration=Release MercuryAPI.sln /p:VCToolPath="/cygdrive/c/Program Files/Microsoft Visual Studio 8/VC/vcpackages"
 
-# C:\Program Files\Microsoft Visual Studio 8\Common7\IDE\..\..\vc\vcpackages\vcbuild.exe /rebuild c:\svn\TEST\c\proj\MercuryAPI\MercuryAPI.vcproj "Release|Win32" 
+# C:\Program Files\Microsoft Visual Studio 8\Common7\IDE\..\..\vc\vcpackages\vcbuild.exe /rebuild c:\svn\TEST\c\proj\MercuryAPI\MercuryAPI.vcxproj "Release|Win32" 

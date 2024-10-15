@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2011 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,7 @@
 
 #include "tm_reader.h"
 #include "osdep.h"
+
 #ifdef TMR_ENABLE_LLRP_READER
 
 #include <inttypes.h>
@@ -49,7 +50,6 @@
 #include <time.h>	
 #include "llrp_reader_imp.h"
 #include "tmr_utils.h"
-
 #define BACKGROUND_RECEIVER_LOOP_PERIOD 1
 #define MAX_KEEP_ALIVE_ACK_MISSES 3
 #define TMMP_CUSTOM_RFPHASE        143
@@ -198,13 +198,17 @@ TMR_LLRP_notifyTransportListener(TMR_Reader *reader, LLRP_tSMessage *pMsg, bool 
 TMR_Status
 TMR_LLRP_sendMessage(TMR_Reader *reader, LLRP_tSMessage *pMsg, int timeoutMs)
 {
+  TMR_Status retTMR = TMR_SUCCESS;
+  LLRP_tResultCode Ret = LLRP_RC_OK;
+
   LLRP_tSConnection *pConn = reader->u.llrpReader.pConn;
   timeoutMs += reader->u.llrpReader.transportTimeout;
 
-  if (NULL == pConn)
+  if ((NULL == pConn) || (NULL == pMsg))
   {
-    return TMR_ERROR_LLRP_SENDIO_ERROR;
-  }
+    retTMR = TMR_ERROR_LLRP_SENDIO_ERROR;
+    goto Error_TMR_LLRP_send;
+  }  
 
   pMsg->MessageID = reader->u.llrpReader.msgId ++;
 
@@ -221,26 +225,26 @@ TMR_LLRP_sendMessage(TMR_Reader *reader, LLRP_tSMessage *pMsg, int timeoutMs)
     pthread_mutex_lock(&reader->u.llrpReader.transmitterLock);
     tx_mutex_lock_enabled = true;
   }
-  if (LLRP_RC_OK != LLRP_Conn_sendMessage(pConn, pMsg))
-  {
-    const LLRP_tSErrorDetails *pError = LLRP_Conn_getSendError(pConn);
-    sprintf(reader->u.llrpReader.errMsg, "ERROR: %s sendMessage failed, %s",
-                pMsg->elementHdr.pType->pName,
-                pError->pWhatStr ? pError->pWhatStr : "no reason given");
 
-    if(true == tx_mutex_lock_enabled)
-    {
-      pthread_mutex_unlock(&reader->u.llrpReader.transmitterLock);
-      tx_mutex_lock_enabled = false;
-    }
-    return TMR_ERROR_LLRP_SENDIO_ERROR;
-  }
+  Ret = LLRP_Conn_sendMessage(pConn, pMsg);
+  
   if(true == tx_mutex_lock_enabled)
   {
     pthread_mutex_unlock(&reader->u.llrpReader.transmitterLock);
     tx_mutex_lock_enabled = false;
   }
-  return TMR_SUCCESS;
+  
+  if ( LLRP_RC_OK != Ret)
+  { // Ignoring this error for now, if any
+    
+    // As retries code similar to TMMP_sendMessage() 
+    // seems to be not effective here...
+    //REVISIT AGAIN, WHENEVER NEEDED 
+    Ret = LLRP_RC_OK;	  
+  }
+
+Error_TMR_LLRP_send:
+  return retTMR;
 }
 
 /**
@@ -815,7 +819,7 @@ TMR_LLRP_cmdGetTMMetadataFlag(TMR_Reader *reader, uint16_t *metadata)
  * Command to get the StatsEnable
  *
  * @param reader Reader pointer
- * @param[out] StatsEnable of uint16_t to hold the StatsEnable flag
+ * @param statsEnable of uint16_t to hold the StatsEnable flag
  **/ 
 TMR_Status
 TMR_LLRP_cmdGetTMStatsEnable(TMR_Reader *reader, uint16_t *statsEnable)
@@ -910,7 +914,7 @@ TMR_LLRP_cmdGetTMStatsEnable(TMR_Reader *reader, uint16_t *statsEnable)
  * Command to get the StatsValue
  *
  * @param reader Reader pointer
- * @param[out] StatsValue of TMR_Reader_StatsValues to hold the StatsValue
+ * @param statsValue of TMR_Reader_StatsValues to hold the StatsValue
  **/ 
 TMR_Status
 TMR_LLRP_cmdGetTMStatsValue(TMR_Reader *reader, TMR_Reader_StatsValues *statsValue)
@@ -1184,8 +1188,8 @@ TMR_LLRP_cmdGetTMAntennaReturnloss(TMR_Reader *reader, TMR_PortValueList *return
  * Command to Detect antenna connection status
  *
  * @param reader Reader pointer
- * @param count[out] Number of antennas detected 
- * @param[out] ports Pointer to TMR_LLRP_PortDetect object
+ * @param count Number of antennas detected 
+ * @param ports Pointer to TMR_LLRP_PortDetect object
  */
 TMR_Status
 TMR_LLRP_cmdAntennaDetect(TMR_Reader *reader, uint8_t *count, TMR_LLRP_PortDetect *ports)
@@ -1261,6 +1265,7 @@ TMR_LLRP_cmdAntennaDetect(TMR_Reader *reader, uint8_t *count, TMR_LLRP_PortDetec
  * Command to get thingmagic Device Information Capabilities
  *
  * @param reader Reader pointer
+ * @param param type of parameter
  * @param version Pointer to TMR_String to hold the version hardware value 
  */
 TMR_Status
@@ -1371,6 +1376,7 @@ TMR_LLRP_cmdGetTMDeviceInformationCapabilities(TMR_Reader *reader, int param, TM
  * Command to get thingmagic Device Information IDs
  *
  * @param reader Reader pointer
+ * @param param type of parameter
  * @param id Pointer to uint16_t to hold the product ID or Product group ID 
  */
 TMR_Status
@@ -1732,7 +1738,7 @@ TMR_LLRP_cmdGetReaderCapabilities(TMR_Reader *reader, TMR_LLRP_ReaderCapabilitie
  * Command to get Regulatory capabilities
  *
  * @param reader Reader pointer
- * @param capabilities Pointer to TMR_LLRP_ReaderCapabilities
+ * @param table Pointer to TMR_uint32List
  */
 TMR_Status
 TMR_LLRP_cmdGetRegulatoryCapabilities(TMR_Reader *reader, TMR_uint32List *table)
@@ -1818,7 +1824,8 @@ TMR_LLRP_cmdGetRegulatoryCapabilities(TMR_Reader *reader, TMR_uint32List *table)
  * Command to set GPO state
  *
  * @param reader Reader pointer
- * @param pins[in] Pointer to TMR_GpioPin array
+ * @param count
+ * @param state[] Pointer to TMR_GpioPin array
  */
 TMR_Status
 TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
@@ -1830,6 +1837,7 @@ TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
   LLRP_tSMessage                        *pRspMsg;
   LLRP_tSSET_READER_CONFIG_RESPONSE     *pRsp;
   uint8_t i;
+  LLRP_tSGPOWriteData *pParam;
 
   ret = TMR_SUCCESS;
 
@@ -1838,14 +1846,12 @@ TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
    * SET_READER_CONFIG.GPOWriteData
    **/
   pCmd = LLRP_SET_READER_CONFIG_construct();
-
   /* Set GPO state as per the list supplied */
   for (i=0; i<count; i++)
   {
     uint8_t id;
     bool high;
     llrp_u16_t llrpId;
-    LLRP_tSGPOWriteData *pParam;
 
     id = state[i].id;
     high = state[i].high;
@@ -1853,48 +1859,27 @@ TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
     /* Construct LLRP parameter */
     pParam = LLRP_GPOWriteData_construct();
     ret = TMR_LLRP_tmToLlrpGpo(reader->u.llrpReader.capabilities.model, id, &llrpId);
-    if (TMR_SUCCESS != ret) { return ret; }
+    if (TMR_SUCCESS != ret) { printf("FAILED TMR_LLRP_tmToLlrpGpo here!!"); return ret; }
     LLRP_GPOWriteData_setGPOPortNumber(pParam, llrpId);
     LLRP_GPOWriteData_setGPOData(pParam, high);
 
     /* Add param */
     LLRP_SET_READER_CONFIG_addGPOWriteData(pCmd, pParam);
   }
-
   /**
    * Now the message is framed completely and send the message
    **/
   pCmdMsg = &pCmd->hdr;
-
   if (reader->continuousReading)
   {
+    TMR_LLRP_setBackgroundReceiverState(reader, false);
     ret = TMR_LLRP_sendMessage(reader, pCmdMsg, reader->u.llrpReader.transportTimeout);
+    // Faster memory leak issue (as seen from top command is %0.1 per 5 secs) 
+    // %MEM growth issue FIXED here..      
+    TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
     if (TMR_SUCCESS != ret)
     {
-      TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
       return ret;
-    }
-
-    while (false == reader->u.llrpReader.isResponsePending)
-    {
-      tmr_sleep(10);
-    }
-
-    if (NULL != reader->u.llrpReader.unhandledAsyncResponse.lMsg)
-    {
-      if (pCmdMsg->elementHdr.pType->pResponseType == reader->u.llrpReader.unhandledAsyncResponse.lMsg->elementHdr.pType)
-      {
-        TMR_LLRP_freeMessage((LLRP_tSMessage *)reader->u.llrpReader.unhandledAsyncResponse.lMsg);
-        reader->u.llrpReader.isResponsePending = false;
-        TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
-
-        return TMR_SUCCESS;
-      }
-    }
-    else
-    {
-      TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
-      return TMR_ERROR_LLRP;
     }
   }
   else
@@ -1925,7 +1910,6 @@ TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
      **/
     TMR_LLRP_freeMessage(pRspMsg);
   }
-
   return ret;
 }
 
@@ -1934,7 +1918,7 @@ TMR_LLRP_cmdSetGPOState(TMR_Reader *reader, uint8_t count,
  * Command to set Read Transmit power list
  *
  * @param reader Reader pointer
- * @param pPortValueList[in] Pointer to TMR_PortValueList
+ * @param pPortValueList Pointer to TMR_PortValueList
  */
 TMR_Status
 TMR_LLRP_cmdSetReadTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPortValueList)
@@ -2064,7 +2048,7 @@ TMR_LLRP_cmdSetReadTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPor
  * Command to get Selected protocols
  *
  * @param reader Reader pointer
- * @param features  Pointer to TMR_TagProtocolList to hold the Selected Protoocls value
+ * @param protocolList Pointer to TMR_TagProtocolList to hold the Selected Protoocls value
  */
 TMR_Status
 TMR_LLRP_cmdGetSelectedProtocols(TMR_Reader *reader, TMR_TagProtocolList *protocolList)
@@ -2355,48 +2339,49 @@ TMR_LLRP_cmdGetGPIState(TMR_Reader *reader, uint8_t *count, TMR_GpioPin state[])
       TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
       return ret;
     }
-
-    while (false == reader->u.llrpReader.isResponsePending)
-    {
-      tmr_sleep(10);
-    }
-
+//  Removed while loop to avoid freeze issue
+//    while (false == reader->u.llrpReader.isResponsePending)
+//    {
+//      tmr_sleep(10);
+//    }
     if (NULL != reader->u.llrpReader.unhandledAsyncResponse.lMsg)
     {
       if (pCmdMsg->elementHdr.pType->pResponseType == reader->u.llrpReader.unhandledAsyncResponse.lMsg->elementHdr.pType)
       {
-        pRsp = (LLRP_tSGET_READER_CONFIG_RESPONSE *)reader->u.llrpReader.unhandledAsyncResponse.lMsg;
-        if (TMR_SUCCESS != TMR_LLRP_checkLLRPStatus(pRsp->pLLRPStatus))  
+	pRsp = (LLRP_tSGET_READER_CONFIG_RESPONSE *)reader->u.llrpReader.unhandledAsyncResponse.lMsg;
+#if 0 /* commented-01 as this seems to create crash here.. */       	
+	if (TMR_SUCCESS != TMR_LLRP_checkLLRPStatus(pRsp->pLLRPStatus))  
         {
           TMR_LLRP_freeMessage((LLRP_tSMessage *)reader->u.llrpReader.unhandledAsyncResponse.lMsg);
           reader->u.llrpReader.isResponsePending = false;
           TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
           return TMR_ERROR_LLRP; 
         }
-        /**
-         * Response is success, extract GPI state from it
-         **/
+#endif /* commented-01	*/
+	/**
+        * Response is success, extract GPI state from it
+        **/
+       {
+        LLRP_tSGPIPortCurrentState* list = pRsp->listGPIPortCurrentState;
+        while (NULL != list)
         {
-          LLRP_tSGPIPortCurrentState* list = pRsp->listGPIPortCurrentState;
-          while (NULL != list)
-          {
-            TMR_GpioPin* pin = &state[*count];
-            ret = TMR_LLRP_llrpToTmGpi(reader->u.llrpReader.capabilities.model, list->GPIPortNum, &pin->id);
-            if (TMR_SUCCESS != ret) { return ret; }
-            pin->high = (LLRP_GPIPortState_High == list->eState);
-            pin->output = false;
-            (*count)++;
-            list = (LLRP_tSGPIPortCurrentState*)list->hdr.pNextSubParameter;
-          }
+          TMR_GpioPin* pin = &state[*count];
+          ret = TMR_LLRP_llrpToTmGpi(reader->u.llrpReader.capabilities.model, list->GPIPortNum, &pin->id);
+          if (TMR_SUCCESS != ret) { return ret; }
+          pin->high = (LLRP_GPIPortState_High == list->eState);
+          pin->output = false;
+          (*count)++;
+          list = (LLRP_tSGPIPortCurrentState*)list->hdr.pNextSubParameter;
         }
+       }
+     }
+      // commented-01
+      //TMR_LLRP_freeMessage((LLRP_tSMessage *)reader->u.llrpReader.unhandledAsyncResponse.lMsg);
+      reader->u.llrpReader.isResponsePending = false;
+      TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
 
-        TMR_LLRP_freeMessage((LLRP_tSMessage *)reader->u.llrpReader.unhandledAsyncResponse.lMsg);
-        reader->u.llrpReader.isResponsePending = false;
-        TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
-
-        return TMR_SUCCESS;
-      }
-    }    
+      return TMR_SUCCESS;
+    }
     else
     {
       TMR_LLRP_freeMessage((LLRP_tSMessage *)pCmd);
@@ -2456,7 +2441,7 @@ TMR_LLRP_cmdGetGPIState(TMR_Reader *reader, uint8_t *count, TMR_GpioPin state[])
  * Command to get Read transmit power list
  *
  * @param reader Reader pointer
- * @param pPortValueList[out] Pointer to TMR_PortValueList to hold the power value list
+ * @param pPortValueList Pointer to TMR_PortValueList to hold the power value list
  */
 TMR_Status 
 TMR_LLRP_cmdGetReadTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPortValueList)
@@ -2544,7 +2529,7 @@ TMR_LLRP_cmdGetReadTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPor
  * Command to set write transmit power list
  *
  * @param reader Reader pointer
- * @param pPortValueList[in] Pointer to TMR_PortValueList
+ * @param pPortValueList Pointer to TMR_PortValueList
  */
 TMR_Status
 TMR_LLRP_cmdSetWriteTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPortValueList)
@@ -2680,7 +2665,7 @@ TMR_LLRP_cmdSetWriteTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPo
  * Command to get write transmit power list
  *
  * @param reader Reader pointer
- * @param pPortValueList[out] Pointer to TMR_PortValueList to hold the power list
+ * @param pPortValueList Pointer to TMR_PortValueList to hold the power list
  */
 TMR_Status
 TMR_LLRP_cmdGetWriteTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPortValueList)
@@ -2793,6 +2778,7 @@ TMR_LLRP_cmdGetWriteTransmitPowerList(TMR_Reader *reader, TMR_PortValueList *pPo
  * Command to delete all ROSpecs on LLRP Reader
  *
  * @param reader Reader pointer
+ * @param receiveResponse true or false
  */
 TMR_Status
 TMR_LLRP_cmdDeleteAllROSpecs(TMR_Reader *reader, bool receiveResponse)
@@ -3137,11 +3123,9 @@ TMR_LLRP_prepareTagFilter(LLRP_tSAntennaConfiguration **pAntConfig, LLRP_tSC1G2I
   }
   else
   {
+#ifdef TMR_ENABLE_ISO180006B
     if (TMR_TAG_PROTOCOL_ISO180006B == protocol)
     {
-
-#ifdef TMR_ENABLE_ISO180006B
-
       LLRP_tSThingMagicISO180006BInventoryCommand   *pTMISOInventory;
       LLRP_tSThingMagicISO180006BTagPattern         *pTMISOTagPattern;
 
@@ -3245,9 +3229,9 @@ TMR_LLRP_prepareTagFilter(LLRP_tSAntennaConfiguration **pAntConfig, LLRP_tSC1G2I
       {
     return TMR_ERROR_INVALID;
   }
-#endif /* TMR_ENABLE_ISO180006B */
     }
     else
+#endif /* TMR_ENABLE_ISO180006B */
     {
       /* Unsuppoerd Protocol */
       return TMR_ERROR_INVALID;
@@ -3718,6 +3702,7 @@ TMR_LLRP_cmdAddROSpec(TMR_Reader *reader, uint16_t readDuration,
           LLRP_InventoryParameterSpec_addCustom(pInventoryParameterSpec, (LLRP_tSParameter *)pInventoryParameterCustom);
         }
 #endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
       else if(TMR_TAG_PROTOCOL_ATA == protocol)
       {
         LLRP_tSThingMagicCustomAirProtocols *pInventoryParameterCustom;
@@ -3757,6 +3742,7 @@ TMR_LLRP_cmdAddROSpec(TMR_Reader *reader, uint16_t readDuration,
         /* add this as a custom parameter to InventoryParameterSpec */
         LLRP_InventoryParameterSpec_addCustom(pInventoryParameterSpec, (LLRP_tSParameter *)pInventoryParameterCustom);
       }
+#endif /* TMR_ENABLE_GEN2_ONLY */
       else
       {
         return TMR_ERROR_UNIMPLEMENTED_FEATURE;
@@ -4091,7 +4077,6 @@ TMR_LLRP_cmdAddROSpec(TMR_Reader *reader, uint16_t readDuration,
       /* Now ROReportSpec is fully framed and set it to ROSpec */
       LLRP_ROSpec_setROReportSpec(pROSpec, pROReportSpec);
     }
-
     /**
      * 7. Initialize and set RFSurveySpec
      **/
@@ -4133,7 +4118,6 @@ TMR_LLRP_cmdAddROSpec(TMR_Reader *reader, uint16_t readDuration,
       LLRP_ROSpec_addSpecParameter(pROSpec, (LLRP_tSParameter *)pRFSurveySpec);
     }
   }
-
   /* Now ROSpec is fully framed, add to AddROSpec */
   LLRP_ADD_ROSPEC_setROSpec(pCmd, pROSpec);
 
@@ -4278,6 +4262,7 @@ TMR_LLRP_cmdDisableROSpec(TMR_Reader *reader)
  * Command to Start the ROSpec
  *
  * @param reader Reader pointer
+ * @param roSpecId
  */
 TMR_Status
 TMR_LLRP_cmdStartROSpec(TMR_Reader *reader, llrp_u32_t roSpecId)
@@ -4533,8 +4518,8 @@ TMR_LLRP_verifyReadOperation(TMR_Reader *reader, int32_t *tagCount)
  * information from LLRP RO and ACCESS Reports
  *
  * @param reader Reader pointer
- * @param data[out] Pointer to TMR_TagReadData
- * @param pTagReportData[in] Pointer to LLRP_tSTagReportData which needs to be parsed.
+ * @param data Pointer to TMR_TagReadData
+ * @param pTagReportData Pointer to LLRP_tSTagReportData which needs to be parsed.
  */
 TMR_Status
 TMR_LLRP_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *data, LLRP_tSTagReportData *pTagReportData)
@@ -4755,9 +4740,12 @@ TMR_LLRP_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *data, LLR
                     case LLRP_ThingMagicCustomProtocol_Gen2:
                       data->tag.protocol = TMR_TAG_PROTOCOL_GEN2;
                       break;
+#ifdef TMR_ENABLE_ISO180006B
                     case LLRP_ThingMagicCustomProtocol_Iso180006b:
                       data->tag.protocol = TMR_TAG_PROTOCOL_ISO180006B;
                       break;
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
                     case LLRP_ThingMagicCustomProtocol_IPX64:
                       data->tag.protocol = TMR_TAG_PROTOCOL_IPX64;
                       break;
@@ -4767,6 +4755,7 @@ TMR_LLRP_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *data, LLR
                     case LLRP_ThingMagicCustomProtocol_Ata:
                       data->tag.protocol = TMR_TAG_PROTOCOL_ATA;
                       break;
+#endif /* TMR_ENABLE_GEN2_ONLY */
                     default:
                       break;
                   }
@@ -4979,8 +4968,8 @@ TMR_LLRP_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *data, LLR
  * This method extracts the data from TagOpSpecResult and 
  * fills the data variable as a uint8List.
  *
- * @param pParameter[in] Pointer to LLRP_tSParameter which contains the opspec result
- * @param data[out] Pointer to TMR_uint8List which contains the extracted data.
+ * @param pParameter Pointer to LLRP_tSParameter which contains the opspec result
+ * @param data Pointer to TMR_uint8List which contains the extracted data.
  */
 void
 TMR_LLRP_parseTagOpSpecData(LLRP_tSParameter *pParameter, TMR_uint8List *data)
@@ -6219,7 +6208,7 @@ TMR_LLRP_cmdGetThingmagicReaderConfiguration(TMR_Reader *reader,
  * Command to set Thingmagic reader configuration
  *
  * @param reader Reader pointer
- * @param config[in] Pointer to TMR_LLRP_TMReaderConfiguration to be set
+ * @param config Pointer to TMR_LLRP_TMReaderConfiguration to be set
  */
 TMR_Status
 TMR_LLRP_cmdSetThingmagicReaderConfiguration(TMR_Reader *reader, 
@@ -6792,7 +6781,7 @@ TMR_LLRP_cmdGetThingMagicGEN2ProtocolExtension(TMR_Reader *reader, uint8_t *prot
  * Command to get Thingmagic Device Protocol Capabilities
  *
  * @param reader Reader pointer
- * @param protocol Pointer to TMR_TagProtocolList  to
+ * @param protocolList Pointer to TMR_TagProtocolList  to
  *  hold the value of Thingmagic Device protocol Capabilities
  */
 TMR_Status
@@ -6882,12 +6871,19 @@ TMR_LLRP_cmdGetTMDeviceProtocolCapabilities(TMR_Reader *reader, TMR_TagProtocolL
       /**
        *Adding support for ATA, IPX64 and IPX256 protocols 
        **/
-      if (TMR_TAG_PROTOCOL_GEN2 == protocolList->list[i] || 
-          TMR_TAG_PROTOCOL_ISO180006B == protocolList->list[i] || 
-          TMR_TAG_PROTOCOL_ATA == protocolList->list[i] ||
-          TMR_TAG_PROTOCOL_IPX64 == protocolList->list[i] ||
-          TMR_TAG_PROTOCOL_IPX256 == protocolList->list[i]) 
+      if (TMR_TAG_PROTOCOL_GEN2 == protocolList->list[i]
+#ifdef TMR_ENABLE_ISO180006B
+          || TMR_TAG_PROTOCOL_ISO180006B == protocolList->list[i] 
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
+          || TMR_TAG_PROTOCOL_ATA == protocolList->list[i]
+          || TMR_TAG_PROTOCOL_IPX64 == protocolList->list[i]
+          || TMR_TAG_PROTOCOL_IPX256 == protocolList->list[i]
+#endif /* TMR_ENABLE_GEN2_ONLY */
+         ) 
+      {
         reader->u.llrpReader.supportedProtocols |= (1 << (protocolList->list[i] -1 ));
+      }
       protocolList->len ++;
     }
 
@@ -6906,7 +6902,7 @@ TMR_LLRP_cmdGetTMDeviceProtocolCapabilities(TMR_Reader *reader, TMR_TagProtocolL
  * Command to get active RFControl
  *
  * @param reader Reader pointer
- * @param rfControl[out] Pointer to TMR_LLRP_RFControl
+ * @param rfControl Pointer to TMR_LLRP_RFControl
  */
 TMR_Status 
 TMR_LLRP_cmdGetActiveRFControl(TMR_Reader *reader, TMR_LLRP_RFControl *rfControl)
@@ -7007,7 +7003,7 @@ TMR_LLRP_cmdGetActiveRFControl(TMR_Reader *reader, TMR_LLRP_RFControl *rfControl
  * Command to set active RFControl
  *
  * @param reader Reader pointer
- * @param rfControl[in] Pointer to TMR_LLRP_RFControl
+ * @param rfControl Pointer to TMR_LLRP_RFControl
  */
 TMR_Status 
 TMR_LLRP_cmdSetActiveRFControl(TMR_Reader *reader, TMR_LLRP_RFControl *rfControl)
@@ -7414,7 +7410,7 @@ TMR_LLRP_cmdGetsendSelect(TMR_Reader *reader, bool *select)
  * Command to Set sendSelect value
  *
  * @param reader Reader pointer
- * @param[in] Select Pointer to hold the value of select which needs to be set
+ * @param select Pointer to hold the value of select which needs to be set
  */
 TMR_Status
 TMR_LLRP_cmdSetsendSelect(TMR_Reader *reader, bool *select)
@@ -9378,7 +9374,7 @@ TMR_LLRP_cmdSetTMLicenseKey(TMR_Reader *reader, TMR_uint8List *license)
  * Command to Set  TMAsyncOfftime value
  *
  * @param reader Reader pointer
- * @param license Pointer to TMR_uint8List which needs to be set
+ * @param offtime Pointer to TMR_uint8List which needs to be set
    */
 TMR_Status
 TMR_LLRP_cmdSetTMAsyncOffTime(TMR_Reader *reader, uint32_t offtime)
@@ -10740,7 +10736,7 @@ TMR_LLRP_processReceivedMessage(TMR_Reader *reader, LLRP_tSMessage *pMsg)
 
     if(reader->continuousReading)
     {
-        process_async_response(reader);
+       process_async_response(reader);
     }
     /**
      * Do not free pMsg here. We hold that memory for further
@@ -10770,7 +10766,7 @@ TMR_LLRP_processReceivedMessage(TMR_Reader *reader, LLRP_tSMessage *pMsg)
      * know how to handle, ignoring for now
      * and free the message.
      **/
-    TMR_LLRP_freeMessage(pMsg);
+     TMR_LLRP_freeMessage(pMsg);
   }
 
   return ret;
@@ -11490,6 +11486,31 @@ PREPARE_COMMAND:
                 }
                 break;
               }
+            case TMR_GEN2_LOCK_BITS_MASK_USER:
+              {
+                pC1G2LockPayload->eDataField = LLRP_C1G2LockDataField_User_Memory;
+                if( 0 == (args ->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                else if( TMR_GEN2_LOCK_BITS_USER == (args->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Read_Write;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_USER_PERM == (args -> action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Unlock;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_MASK_USER == (args -> action)) 
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Lock;
+                }
+                else
+                {
+                  return TMR_ERROR_INVALID;
+                }
+                break;
+              }
             case TMR_GEN2_LOCK_BITS_TID_PERM:
               {
                 index = 2;
@@ -11515,6 +11536,31 @@ PREPARE_COMMAND:
                 else
                 {
                   pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                break;
+              }
+            case TMR_GEN2_LOCK_BITS_MASK_TID:
+              {
+                pC1G2LockPayload->eDataField = LLRP_C1G2LockDataField_TID_Memory;
+                if( 0 == (args ->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                else if( TMR_GEN2_LOCK_BITS_TID == (args->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Read_Write;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_TID_PERM == (args -> action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Unlock;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_MASK_TID == (args -> action)) 
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Lock;
+                }
+                else
+                {
+                  return TMR_ERROR_INVALID;
                 }
                 break;
               }
@@ -11546,6 +11592,31 @@ PREPARE_COMMAND:
                 }
                 break;
               }
+            case TMR_GEN2_LOCK_BITS_MASK_EPC:
+              {
+                pC1G2LockPayload->eDataField = LLRP_C1G2LockDataField_EPC_Memory;
+                if( 0 == (args ->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                else if( TMR_GEN2_LOCK_BITS_EPC == (args->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Read_Write;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_EPC_PERM == (args -> action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Unlock;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_MASK_EPC == (args -> action)) 
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Lock;
+                }
+                else
+                {
+                  return TMR_ERROR_INVALID;
+                }
+                break;
+              }
             case TMR_GEN2_LOCK_BITS_ACCESS_PERM:
               {
                 index = 6;
@@ -11571,6 +11642,31 @@ PREPARE_COMMAND:
                 else
                 {
                   pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                break;
+              }
+            case TMR_GEN2_LOCK_BITS_MASK_ACCESS:
+              {
+                pC1G2LockPayload->eDataField = LLRP_C1G2LockDataField_Access_Password;
+                if( 0 == (args ->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                else if( TMR_GEN2_LOCK_BITS_ACCESS == (args->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Read_Write;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_ACCESS_PERM == (args -> action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Unlock;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_MASK_ACCESS == (args -> action)) 
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Lock;
+                }
+                else
+                {
+                  return TMR_ERROR_INVALID;
                 }
                 break;
               }
@@ -11602,7 +11698,31 @@ PREPARE_COMMAND:
                 }
                 break;
               }
-
+            case TMR_GEN2_LOCK_BITS_MASK_KILL:
+              {
+                pC1G2LockPayload->eDataField = LLRP_C1G2LockDataField_Kill_Password;
+                if( 0 == (args ->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Unlock;
+                }
+                else if( TMR_GEN2_LOCK_BITS_KILL == (args->action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Read_Write;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_KILL_PERM == (args -> action))
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Unlock;
+                }
+                else if ( TMR_GEN2_LOCK_BITS_MASK_KILL == (args -> action)) 
+                {
+                  pC1G2LockPayload->ePrivilege = LLRP_C1G2LockPrivilege_Perma_Lock;
+                }
+                else
+                {
+                  return TMR_ERROR_INVALID;
+                }
+                break;
+              }
             default:
               {
                 /* Unknown lockaction  return invalid error */
@@ -13879,6 +13999,7 @@ TMR_LLRP_cmdAddAccessSpec(TMR_Reader *reader,
 
           break;
         }
+#ifdef TMR_ENABLE_ISO180006B
       case TMR_TAG_PROTOCOL_ISO180006B:
         {
           LLRP_AccessSpec_setProtocolID(pAccessSpec,
@@ -13886,6 +14007,7 @@ TMR_LLRP_cmdAddAccessSpec(TMR_Reader *reader,
 
           break;
         }
+#endif /* TMR_ENABLE_ISO180006B */
       default:
         {
           TMR_LLRP_freeMessage((LLRP_tSMessage *)pAccessSpec);
@@ -14038,6 +14160,11 @@ TMR_LLRP_parseCustomTagOpSpecResultType(LLRP_tEThingMagicCustomTagOpSpecResultTy
     case LLRP_ThingMagicCustomTagOpSpecResultType_Nonspecific_Reader_Error:
       {
         return TMR_ERROR_LLRP_READER_ERROR;
+      }
+
+    case LLRP_ThingMagicCustomTagOpSpecResultType_Tag_Memory_Overrun_Error:
+      {
+        return TMR_ERROR_GEN2_PROTOCOL_MEMORY_OVERRUN_BAD_PC;
       }
 
     case LLRP_ThingMagicCustomTagOpSpecResultType_Gen2V2_Authentication_Fail:

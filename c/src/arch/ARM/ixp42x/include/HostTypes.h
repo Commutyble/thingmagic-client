@@ -5,7 +5,7 @@
  *
  * \author Harry Tsai <harry@thingmagic.com>
  * \date 20031024
- * Copyright (C) 2003 ThingMagic, LLC
+ * Copyright (c) 2023 Novanta, Inc.
  */
 
 #ifndef __HOSTTYPES_H__

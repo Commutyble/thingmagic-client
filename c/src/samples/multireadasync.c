@@ -104,7 +104,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -251,35 +255,6 @@ int main(int argc, char *argv[])
         region = regions.list[0];
         ret = TMR_paramSet(rp, TMR_PARAM_REGION_ID, &region);
         checkerr(rp, ret, 1, "setting region");  
-      }
-
-#ifdef TMR_ENABLE_UHF
-      /**
-       * Checking the software version of the sargas.
-       * The antenna detection is supported on sargas from software version of 5.3.x.x.
-       * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-       * User has to pass the antenna as arguments.
-       */
-      {
-        ret = isAntDetectEnabled(rp, antennaList);
-        if(TMR_ERROR_UNSUPPORTED == ret)
-        {
-          fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-          usage();
-        }
-        else
-        {
-          checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-        }
-      }
-#endif /* TMR_ENABLE_UHF */
-    }
-    else
-    {
-      if (antennaList != NULL)
-      {
-        printf("Module doesn't support antenna input\n");
-        usage();
       }
     }
 

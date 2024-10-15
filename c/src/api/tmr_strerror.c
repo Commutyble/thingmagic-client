@@ -7,7 +7,7 @@
 
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -136,6 +136,8 @@ TMR_strerr(TMR_Reader *reader, TMR_Status status)
     return "Flash write attempted to cross sector boundary";
   case TMR_ERROR_FLASH_VERIFY_FAILED:
     return "Flash verify failed";
+  case TMR_ERROR_FLASH_PERIPH_UPGRADE_BAD_CRC:
+    return "CRC validation of firmware image failed";
   case TMR_ERROR_NO_TAGS_FOUND:
     return "No tags found";
   case TMR_ERROR_NO_PROTOCOL_DEFINED:
@@ -174,10 +176,10 @@ TMR_strerr(TMR_Reader *reader, TMR_Status status)
     return "Other Gen2 error";
   case TMR_ERROR_GEN2_PROTOCOL_MEMORY_OVERRUN_BAD_PC:
     return "Gen2 memory overrun - bad PC";
-  case TMR_ERROR_GEN2_PROTOCOL_MEMORY_LOCKED:\
+  case TMR_ERROR_GEN2_PROTOCOL_MEMORY_LOCKED:
     return "Gen2 memory locked";
   case TMR_ERROR_GEN2_PROTOCOL_INSUFFICIENT_POWER:
-    return "Gen2 tag has insufficent power for operation";
+    return "Gen2 tag has insufficient power for operation";
   case TMR_ERROR_GEN2_PROTOCOL_NON_SPECIFIC_ERROR:
     return "Gen2 nonspecific error";
   case TMR_ERROR_GEN2_PROTOCOL_UNKNOWN_ERROR:
@@ -279,13 +281,9 @@ TMR_strerr(TMR_Reader *reader, TMR_Status status)
     return "Firmware update is successful. Autonomous mode is already enabled on reader";
   case TMR_ERROR_TIMESTAMP_NULL:
     return "Timestamp cannot be null";
-  case TMR_ERROR_METADATA_PROTOCOLMISSING:
-    return "Invalid argument in /reader/metadata. TMR_TRD_METADATA_FLAG_PROTOCOL is a mandatory parameter.";
   case TMR_ERROR_METADATA_INVALID:
     return "Selected metadata are invalid";
 #ifdef TMR_ENABLE_HF_LF
-  case TMR_ERROR_METADATA_TAGTYPEMISSING:
-    return "Invalid argument in /reader/metadata. TMR_TRD_METADATA_FLAG_TAGTYPE is mandatory for M3e.";
   case TMR_ERROR_UNSUPPORTED_SECUREREAD_TAGTYPE:
     return "Unsupported tagtype for secure read operation.";
 #endif /* TMR_ENABLE_HF_LF */
@@ -295,7 +293,9 @@ TMR_strerr(TMR_Reader *reader, TMR_Status status)
     return "Null pointer exception.";
   case TMR_ERROR_CMDLEN_EXCEED_LIMIT:
     return "Command out of index range";
-
+  case TMR_SUCCESS_STREAMING:
+      return "Connect Successful...Streaming tags";
+  
   default:
     {
       if (NULL == reader)
@@ -320,7 +320,7 @@ TMR_strerr(TMR_Reader *reader, TMR_Status status)
 /**
  * This function will convert error code(uint16_t) into status code(TMR_Status).
  *
- * @param errorCode : 2 bytes of error code received from reader. 
+ * @param errCode 2 bytes of error code received from reader. 
  */
 TMR_Status TMR_translateErrorCode(uint16_t errCode)
 {

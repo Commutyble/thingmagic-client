@@ -1,13 +1,13 @@
 /**
- *  @file serial_transport_win32.c
- *  @brief Mercury API - Serial transport over local serial port on Win32
+ *  @file serial_transport_win32_nonOverlapped.c
+ *  @brief Mercury API - Serial transport over local serial port on Win32 with no overlapping
  *  @author Nathan Williams
  *  @date 10/20/2009
  */
 
 
 /*
- * Copyright (c) 2010 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -80,7 +80,7 @@ s_open(TMR_SR_SerialTransport *this)
   GetCommState(c->handle, &dcb);
   dcb.fOutxCtsFlow = 0;
   dcb.fOutxDsrFlow = 0;
-  dcb.fDtrControl = DTR_CONTROL_DISABLE;
+  dcb.fDtrControl = DTR_CONTROL_ENABLE;
   dcb.fDsrSensitivity = 0;
   dcb.fOutX = 0;
   dcb.fInX = 0;

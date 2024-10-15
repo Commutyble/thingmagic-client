@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?define ApplicationName="UniversalReaderAssistant 3.2" ?>
+<?define ProductVersion="!(bind.FileVersion.URA2)" ?>
+<?define UpgradeCode="6569307f-e5f4-4acd-adfe-268926597e02" ?>
+<?define PackageCode="*"?>
+<?define RTMProductVersion="1.0.0" ?>
+<?define Manufacturer="ThingMagic"?>
+<!--
+  The name of application exe file. This will be used to kill the process when updating
+  and creating the desktop shortcut
+  -->
+<?define ExeProcessName="UniversalReaderAssistant.exe" ?>
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension"
+     xmlns:netfx="http://schemas.microsoft.com/wix/NetFxExtension"
+     xmlns:difx='http://schemas.microsoft.com/wix/DifxAppExtension'>
+  <Product Id="*"
+           Name="$(var.ApplicationName)"
+           Language="1033"
+           Codepage="1252"
+           Version="$(var.ProductVersion)"
+           Manufacturer="$(var.Manufacturer)"
+           UpgradeCode="$(var.UpgradeCode)">
+
+    <Package Id="$(var.PackageCode)"
+             Description="PackageDescription"
+             Comments="Comments"
+             Manufacturer="$(var.Manufacturer)"
+             InstallerVersion="200"
+             Languages="1033"
+             SummaryCodepage="1252"
+             InstallScope="perMachine"
+             InstallPrivileges="elevated"
+             Compressed="yes"
+             AdminImage="no"
+             Keywords="Installer,MSI,Database" />
+
+    <!--Allow users to choose installation location-->
+    <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONROOTDIRECTORY"/>
+    <UI>
+      <UIRef Id="WixUI_Mondo" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+    </UI>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Universal Assitant Reader" />
+    <Property Id="WixShellExecTarget" Value="[ProgramFilesFolder]\ThingMagic\UniversalReaderAssistant.exe" />
+    <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+
+    <!-- 493 by 58 pixels, this image will appear at the top of all but the first page of the installer.-->
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.SolutionDir)CommanResources\Banner1.jpg" />
+
+    <!--493 by 312 pixels, this bitmap will appear on the first page of the installer.-->
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.SolutionDir)CommanResources\Banner2.jpg" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.SolutionDir)CommanResources\EULA.rtf" />
+
+    <!--Installer privileges-->
+    <Condition Message= "You need to be an administrator to install this product.">
+      Privileged
+    </Condition>
+
+    <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
+
+    <!--The Upgrade table contains information required during major upgrades.-->
+    <Upgrade Id="$(var.UpgradeCode)">
+      <!-- Detect any newer version of this product -->
+      <UpgradeVersion Minimum="$(var.ProductVersion)"
+                      IncludeMinimum="no"
+                      OnlyDetect="yes"
+                      Language="1033"
+                      Property="NEWPRODUCTFOUND" />
+      <!-- Detect and remove any older version of this product -->
+      <UpgradeVersion Minimum="$(var.RTMProductVersion)"
+                      IncludeMinimum="yes"
+                      Maximum="$(var.ProductVersion)"
+                      IncludeMaximum="no"
+                      OnlyDetect="no"
+                      Language="1033"
+                      Property="UPGRADEFOUND" />
+    </Upgrade>
+
+    <!-- Prevent downgrading -->
+    <CustomAction Id="PREVENTDOWNGRADE" Error="Newer version already installed"/>
+
+    <!--Schedule custom action in InstallExecuteSequence tables and RemoveExistingProducts 
+        action in InstallExecuteSequence table-->
+    <InstallExecuteSequence>
+      <Custom Action="PREVENTDOWNGRADE" After="FindRelatedProducts">NEWPRODUCTFOUND</Custom>
+      <!-- The InstallValidate option removes all the files regardless then installs the 
+      newer versions. The InstallFinalize only removes those files that have changed 
+      between the two -->
+      <RemoveExistingProducts After="InstallValidate" />
+    </InstallExecuteSequence>
+
+    <!-- This will close the URA app if it's running while upgrading/uninstalling -->
+    <util:CloseApplication Id="CloseSuperForm" CloseMessage="yes" Description="Close the application before installing or uninstalling"
+                           ElevatedCloseMessage="no" RebootPrompt="no" Target="$(var.ExeProcessName)" />
+
+    <!--Detect .net framework 4.0-->
+    <PropertyRef Id="NETFRAMEWORK40CLIENT"/>
+    <Condition Message="This application requires .NET Framework 4.0 Client Profile. Please install the .NET Framework then run this installer again.">
+      <![CDATA[Installed OR NETFRAMEWORK40CLIENT]]>
+    </Condition>
+
+    <!--Shortcut icon for URA2.0-->
+    <Icon Id="thing_magic_icon.ico" SourceFile="$(var.SolutionDir)CommanResources\thing-magic-icon.ico" />
+
+    <!--Set Installer's Icon in Add/Remove Programs -->
+    <Property Id="ARPPRODUCTICON" Value="thing_magic_icon.ico" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="APPLICATIONROOTDIRECTORY" Name="ThingMagic">
+          <Directory Id="DriverDir" Name="Drivers">
+            <Directory Id="MICRODRIVERDIRECTORY" Name="Micro Drivers"/>
+            <Directory Id="M6eDRIVERDIRECTORY" Name="M6e Drivers"/>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="ThingMagic"/>
+      </Directory>
+      <Directory Id ="DesktopFolder" Name="UniversalReaderAssistant2.0"/>
+    </Directory>
+
+    <DirectoryRef Id="APPLICATIONROOTDIRECTORY">
+      <Component Id="ProductComponent" Guid="83c6aaba-17c0-4d13-8d13-516eb5b469da">
+        <File Id='URA2' Name='UniversalReaderAssistant.exe'
+              DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\UniversalReaderAssistant.exe"
+              KeyPath='yes' >
+          <Shortcut Id="desktop" Directory="DesktopFolder"
+                    Name="UniversalReaderAssistant" WorkingDirectory='INSTALLLOCATION'
+                    Icon="thing_magic_icon.ico" IconIndex="0" Advertise="yes" />
+        </File>
+        <File Id='MercuryAPI' Name='MercuryAPI.dll'
+              Vital='yes' DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\MercuryAPI.dll"/>
+        <File Id='LTK' Name='LLRP.dll' Vital='yes'
+              DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\LLRP.dll"/>
+        <File Id='LOG4NET' Name='log4net.dll' Vital='yes'
+              DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\log4net.dll"/>
+        <File Id='APPCONFIG' Name='UniversalReaderAssistant.exe.config' Vital='yes'
+              DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\UniversalReaderAssistant.exe.config"/>
+        <File Id='Bonjour' Name='Interop.Bonjour.dll' Vital='yes'
+                 DiskId='1' Source="$(var.SolutionDir)CommanResources\Interop.Bonjour.dll"/>
+        <File Id='MvvmLightDll' Name='GalaSoft.MvvmLight.dll' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.dll"/>
+        <File Id='MvvmLightPDB' Name='GalaSoft.MvvmLight.pdb' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.pdb"/>
+        <File Id='MvvmLightXML' Name='GalaSoft.MvvmLight.xml' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.xml"/>
+        <File Id='MvvmLightExtraDll' Name='GalaSoft.MvvmLight.Extras.dll' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.Extras.dll"/>
+        <File Id='MvvmLightExtraPDB' Name='GalaSoft.MvvmLight.Extras.pdb' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.Extras.pdb"/>
+        <File Id='MvvmLightExtraXML' Name='GalaSoft.MvvmLight.Extras.xml' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\GalaSoft.MvvmLight.Extras.xml"/>
+        <File Id='XceedWpfToolkit' Name='Xceed.Wpf.Toolkit.dll' Vital='yes'
+                 DiskId='1' Source="$(var.UniversalReaderAssistant2.0.TargetDir)\Xceed.Wpf.Toolkit.dll"/>
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="83c6aaba-17c0-4d13-8d13-516eb5b469db">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="UniversalReaderAssistant"
+                  Description="UniversalReaderAssistant"
+                  Target="[APPLICATIONROOTDIRECTORY]UniversalReaderAssistant.exe"
+                  WorkingDirectory="APPLICATIONROOTDIRECTORY"/>
+        <!-- Step 1: Add the uninstall shortcut to your installer package -->
+        <Shortcut Id="UninstallProduct"
+                  Name="Uninstall UniversalReaderAssistant"
+                  Description="Uninstall UniversalReaderAssistant"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]"/>
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\Microsoft\MyApplicationName" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="ProductFeature" Title="Universal Reader Assitant" Level="1">
+      <ComponentRef Id="ProductComponent" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+
+    <Feature Id="ProductFeatureMin" Title="Drivers" Level="1">
+      <Feature Id="M6eDriver" Title="M6e Native USB Driver">
+        <ComponentRef Id="M6eDriverComponent" />
+      </Feature>
+      <Feature Id="MicroDriver" Title="Micro Native USB Driver">
+        <ComponentRef Id="MicroDriverComponent" />
+      </Feature>
+    </Feature>
+  </Product>
+
+  <Fragment>
+    <ComponentGroup Id="M6eDriverComponentGroup" Directory="M6eDRIVERDIRECTORY">
+      <Component Id="M6eDriverComponent" Guid="A23611A3-7727-432B-9FA7-F90A4D9E241D" Permanent="no">
+        <File Id="M6eDriverINF" Name='m6e_usbdriver.inf' DiskId='1' Source='$(var.SolutionDir)CommanResources\USBNativeDrivers\m6e_usbdriver\m6e_usbdriver.inf' KeyPath='yes'></File>
+        <File Id="M6eDriverCAT" Name='m6e_usbdriver.cat' DiskId='1' Source='$(var.SolutionDir)CommanResources\USBNativeDrivers\m6e_usbdriver\m6e_usbdriver.cat' ></File>
+        <difx:Driver Legacy='no' PlugAndPlayPrompt='no' AddRemovePrograms='no' DeleteFiles='yes'></difx:Driver>
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+  <Fragment>
+    <ComponentGroup Id="MicroDriverComponentGroup" Directory="MICRODRIVERDIRECTORY">
+      <Component Id="MicroDriverComponent" Guid="BF5F2734-1980-434D-8BAC-A0FF7DED8B4A" Permanent="no">
+        <File Id="MicroDriverINF" Name='micro_usbdriver.inf' DiskId='1' Source='$(var.SolutionDir)CommanResources\USBNativeDrivers\micro_usbdriver\micro_usbdriver.inf' KeyPath='yes'></File>
+        <File Id="MicroDriverCAT" Name='micro_usbdriver.cat' DiskId='1' Source='$(var.SolutionDir)CommanResources\USBNativeDrivers\micro_usbdriver\micro_usbdriver.cat' ></File>
+        <difx:Driver Legacy='no' PlugAndPlayPrompt='no' AddRemovePrograms='no' DeleteFiles='yes'></difx:Driver>
+      </Component>
+    </ComponentGroup>
+  </Fragment>        
+</Wix>

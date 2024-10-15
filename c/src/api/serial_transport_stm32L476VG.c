@@ -1,14 +1,14 @@
 
 /**
  *  @file serial_transport_stm32L476VG.c
- *  @brief Mercury API - Serial transport functions for STM32F103RB board
+ *  @brief Mercury API - Serial transport functions for STM32L476VG board
  *  @author Pallav Joshi
  *  @date 5/16/2016
  */
 
 
 /*
- * Copyright (c) 2016 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,6 @@
 #include "tm_reader.h"
 #include "main.h"
 
-
 /*** MAX_TX_BUFFER_LENGTH Must be a power of 2 (2,4,8,16,32,64,128,256,512,...) ***/
 #define MAX_TX_BUFFER_LENGTH   256
 #define TBUFLEN ((uint32_t)((tbuf.head < tbuf.tail) ? ((MAX_TX_BUFFER_LENGTH- tbuf.tail)+tbuf.head):(tbuf.head - tbuf.tail)))
@@ -41,13 +40,12 @@
 #define MAX_RX_BUFFER_LENGTH   256
 #define RBUFLEN ((uint32_t)((rbuf.head < rbuf.tail) ? ((MAX_RX_BUFFER_LENGTH- rbuf.tail)+rbuf.head):(rbuf.head - rbuf.tail)))
 
-/*
-*Circular Buffer Structure
-*/
-typedef struct buf_st {
-    volatile uint32_t head;                      /* Next In Index  */
-    uint32_t tail;                               /* Next Out Index */
-    volatile char buffer [MAX_RX_BUFFER_LENGTH]; /* Buffer         */
+/* Circular Buffer Structure */
+typedef struct buf_st
+{
+  volatile uint32_t head;                      /* Next In Index  */
+  uint32_t tail;                               /* Next Out Index */
+  volatile char buffer [MAX_RX_BUFFER_LENGTH]; /* Buffer         */
 }circBuf_t;
 
 circBuf_t rbuf,tbuf;
@@ -60,7 +58,6 @@ circBuf_t rbuf,tbuf;
 #error MAX_TX_BUFFER_LENGTH must be a power of 2.
 #endif
 
-
 #if MAX_RX_BUFFER_LENGTH < 2
 #error MAX_RX_BUFFER_LENGTH is too small.  It must be larger than 1.
 #elif ((MAX_RX_BUFFER_LENGTH & (MAX_RX_BUFFER_LENGTH-1)) != 0)
@@ -71,7 +68,7 @@ circBuf_t rbuf,tbuf;
 static unsigned int tx_restart = 1;             /* NZ if TX restart is required     */
 bool inIsrTX = false;
 
-/********** USART1_IRQHandler Handles USART1 global interrupt request. ***********/ 
+/********** USART1_IRQHandler Handles USART1 global interrupt request. ***********/
 void USART1_IRQHandler (void) 
 {
   volatile unsigned int IIR;
@@ -80,62 +77,65 @@ void USART1_IRQHandler (void)
   uint32_t sendByte;
 
   IIR = USART1->ISR;
-  if (IIR & USART_ISR_RXNE)                      /* read interrupt  */ 
-  {        
-    USART1->ISR &= ~USART_ISR_RXNE;               /* clear interrupt */        
-  
-   
-		receiveByte = (USART1->RDR & 0x1FF);
+  if (IIR & USART_ISR_RXNE)                      /* read interrupt  */
+  {
+    USART1->ISR &= ~USART_ISR_RXNE;               /* clear interrupt */
+
+    receiveByte = (USART1->RDR & 0x1FF);
     next= rbuf.head + 1;
     next &= (MAX_RX_BUFFER_LENGTH-1);
 
     if (next != rbuf.tail)
     {
-			rbuf.buffer[rbuf.head] = receiveByte;
+      rbuf.buffer[rbuf.head] = receiveByte;
       rbuf.head = next;
     }
-   }  
+   }
   
   if (IIR & USART_ISR_TXE)                       /* read interrupt  */
-	{
-    USART1->ISR &= ~USART_ISR_TXE;                /* clear interrupt  */
-      if (tbuf.head != tbuf.tail)
-      {	
-			  sendByte =(tbuf.buffer[tbuf.tail] & 0x1FF);
-	      USART1->TDR  = sendByte ;
-				inIsrTX = true;
-        next = tbuf.tail + 1;
-	      next &= (MAX_TX_BUFFER_LENGTH-1);
-	      tbuf.tail = next;
-      }	
-		  else 
-      {
-        tx_restart = 1;
-        USART1->CR1 &= ~USART_ISR_TXE;           /* disable TX IRQ if nothing to send */
-      }
-		}
+  {
+    USART1->ISR &= ~USART_ISR_TXE;               /* clear interrupt  */
+    if (tbuf.head != tbuf.tail)
+    {
+      sendByte =(tbuf.buffer[tbuf.tail] & 0x1FF);
+      USART1->TDR  = sendByte ;
+      inIsrTX = true;
+      next = tbuf.tail + 1;
+      next &= (MAX_TX_BUFFER_LENGTH-1);
+      tbuf.tail = next;
+    }
+    else
+    {
+      tx_restart = 1;
+      USART1->CR1 &= ~USART_ISR_TXE;           /* disable TX IRQ if nothing to send */
+    }
+  }
 }
 
 
 /****************** SendChar:Sends a character ****************/  
 int SendChar (int c) 
 {
-	if (TBUFLEN >= MAX_TX_BUFFER_LENGTH)          /* If the buffer is full            */
-  return (-1);                                  /* return an error value            */
+  if (TBUFLEN >= MAX_TX_BUFFER_LENGTH)          /* If the buffer is full            */
+  {
+    return (-1);                                /* return an error value            */
+  }
 
-	tbuf.buffer[tbuf.head] = c;
-	inIsrTX = false;
+  tbuf.buffer[tbuf.head] = c;
+  inIsrTX = false;
   tbuf.head +=1;
-  
-	if(tbuf.head == MAX_TX_BUFFER_LENGTH)
-	tbuf.head = 0;	
+
+  if(tbuf.head == MAX_TX_BUFFER_LENGTH)
+  {
+    tbuf.head = 0;
+  }
 
   if(tx_restart)                                /* If TX interrupt is disabled   */
-  {                          
+  {
     tx_restart = 0;                             /* enable it                     */
-		USART1->CR1 |= USART_ISR_TXE;                /* enable TX interrupt           */
-  } 
-	
+    USART1->CR1 |= USART_ISR_TXE;               /* enable TX interrupt           */
+  }
+
   return (0);
 }
 
@@ -149,25 +149,23 @@ void SystemClock_Config(void)
 
   if(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_0)
   {
-  Error_Handler();  
+    Error_Handler();
   }
   LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
   LL_RCC_MSI_Enable();
 
-   /* Wait till MSI is ready */
+  /* Wait till MSI is ready */
   while(LL_RCC_MSI_IsReady() != 1)
   {
-    
   }
   LL_RCC_MSI_EnableRangeSelection();
   LL_RCC_MSI_SetRange(LL_RCC_MSIRANGE_6);
   LL_RCC_MSI_SetCalibTrimming(0);
   LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_MSI);
 
-   /* Wait till System clock is ready */
+  /* Wait till System clock is ready */
   while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_MSI)
   {
-  
   }
   LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
   LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
@@ -182,27 +180,22 @@ void SystemClock_Config(void)
 
 /**
   * @brief USART1 Initialization Function
-  * @param None
   * @retval None
   */
 static void MX_USART1_UART_Init(void)
 {
-
   /* USER CODE BEGIN USART1_Init 0 */
-
   /* USER CODE END USART1_Init 0 */
-
   LL_USART_InitTypeDef USART_InitStruct = {0};
-
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* Peripheral clock enable */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
-  
   LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOB);
-  /**USART1 GPIO Configuration  
-  PB6   ------> USART1_TX
-  PB7   ------> USART1_RX 
+
+  /**USART1 GPIO Configuration
+   * PB6   ------> USART1_TX
+   * PB7   ------> USART1_RX 
   */
   GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
@@ -217,7 +210,6 @@ static void MX_USART1_UART_Init(void)
   NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE BEGIN USART1_Init 1 */
-
   /* USER CODE END USART1_Init 1 */
   USART_InitStruct.BaudRate = 115200;
   USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
@@ -228,13 +220,11 @@ static void MX_USART1_UART_Init(void)
   USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
   LL_USART_Init(USART1, &USART_InitStruct);
   LL_USART_ConfigAsyncMode(USART1);
-	LL_USART_EnableIT_RXNE(USART1);
-	LL_USART_EnableIT_TXE(USART1);
+  LL_USART_EnableIT_RXNE(USART1);
+  LL_USART_EnableIT_TXE(USART1);
   LL_USART_Enable(USART1);
   /* USER CODE BEGIN USART1_Init 2 */
-
   /* USER CODE END USART1_Init 2 */
-
 }
 
 /**
@@ -272,7 +262,7 @@ static TMR_Status
 s_open(TMR_SR_SerialTransport *this)
 {
   int i;
-	
+
   /* Initialize the Tx circular buffer structure */
   tbuf.head = 0;
   tbuf.tail = 0;
@@ -280,7 +270,7 @@ s_open(TMR_SR_SerialTransport *this)
   {
     tbuf.buffer[i] = 0;
   }
-	
+
   /* Initialize the Rx circular buffer structure */
   rbuf.head = 0;
   rbuf.tail = 0;
@@ -296,10 +286,10 @@ s_open(TMR_SR_SerialTransport *this)
 
   /* Configure the system clock */
   SystemClock_Config();
+  start_sysTickTimer();
   /* Initialize all configured peripherals */
   //MX_GPIO_Init();
-    MX_USART1_UART_Init();
-	
+  MX_USART1_UART_Init();
 
   return TMR_SUCCESS;
 }
@@ -316,8 +306,6 @@ s_sendBytes(TMR_SR_SerialTransport *this, uint32_t length,
   uint32_t i = 0;
   tbuf.head = 0;                                /* clear com buffer indexes */
   tbuf.tail = 0;
-	
-
 
   for (i = 0; i<length; i++)
   {
@@ -336,24 +324,30 @@ uint32_t* messageLength, uint8_t* message, const uint32_t timeoutMs)
   * timeoutMs milliseconds, it should return TMR_ERROR_TIMEOUT.
   */
   uint32_t index = 0;
-	*messageLength = 0;
-	
+  uint32_t next;
+  uint64_t Initial = tmr_gettime();
+
+  TMR_Status status = TMR_ERROR_TIMEOUT;
+
   while (index < length )
   {
-    uint32_t next;
+  uint32_t next;
 
-	while (rbuf.head == rbuf.tail);             /*If no data in circular buffer then wait for data*/
-    if (rbuf.head != rbuf.tail)
-    {	
-	  message[index] = rbuf.buffer[rbuf.tail];
-      next = rbuf.tail + 1;
-	  next &= (MAX_RX_BUFFER_LENGTH-1);
-	  rbuf.tail = next;
-    }	
-	index++;
-  }
-	*messageLength = index;
-	
+  while (rbuf.head == rbuf.tail)             /*If no data in circular buffer then wait for data*/
+ {
+  if((tmr_gettime() - Initial) > timeoutMs)
+  return TMR_ERROR_TIMEOUT;
+ }
+  if (rbuf.head != rbuf.tail)
+  {	
+  message[index] = rbuf.buffer[rbuf.tail];
+  next = rbuf.tail + 1;
+  next &= (MAX_RX_BUFFER_LENGTH-1);
+  rbuf.tail = next;
+ }	
+  index++;
+ }
+  *messageLength = index;
   return TMR_SUCCESS;
 }
 
@@ -375,7 +369,7 @@ s_shutdown(TMR_SR_SerialTransport *this)
   /* This routine should close the serial connection and release any
   * acquired resources.
   */
-	USART1->CR1 &= ~USART_ISR_TXE;     /* disable TX IRQ if nothing to send  */
+  USART1->CR1 &= ~USART_ISR_TXE;     /* disable TX IRQ if nothing to send */
   return TMR_SUCCESS;
 }
 

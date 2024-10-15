@@ -4,7 +4,7 @@
  * stop trigger.
  * @file readstopTrigger.c 
  */
-
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,7 +101,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -119,18 +123,22 @@ const char* protocolName(TMR_TagProtocol protocol)
   {
     case TMR_TAG_PROTOCOL_NONE:
       return "NONE";
-    case TMR_TAG_PROTOCOL_ISO180006B:
-      return "ISO180006B";
     case TMR_TAG_PROTOCOL_GEN2:
       return "GEN2";
+#ifdef TMR_ENABLE_ISO180006B
+    case TMR_TAG_PROTOCOL_ISO180006B:
+      return "ISO180006B";
     case TMR_TAG_PROTOCOL_ISO180006B_UCODE:
       return "ISO180006B_UCODE";
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
     case TMR_TAG_PROTOCOL_IPX64:
       return "IPX64";
     case TMR_TAG_PROTOCOL_IPX256:
       return "IPX256";
     case TMR_TAG_PROTOCOL_ATA:
       return "ATA";
+#endif /* TMR_ENABLE_GEN2_ONLY */
     case TMR_TAG_PROTOCOL_ISO14443A:
       return "ISO14443A";
     case TMR_TAG_PROTOCOL_ISO15693:
@@ -212,7 +220,34 @@ int main(int argc, char *argv[])
 #endif
 
   ret = TMR_connect(rp);
-  checkerr(rp, ret, 1, "connecting reader");
+  /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+   * The connection may fail if the module is configured to a different baud rate. If
+   * that is the case, the MercuryAPI tries connecting to the module with other supported
+   * baud rates until the connection is successful using baud rate probing mechanism.
+   */
+  if((ret == TMR_ERROR_TIMEOUT) && 
+     (TMR_READER_TYPE_SERIAL == rp->readerType))
+  {
+    uint32_t currentBaudRate;
+
+    /* Start probing mechanism. */
+    ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+    checkerr(rp, ret, 1, "Probe the baudrate");
+
+    /* Set the current baudrate, so that 
+     * next TMR_Connect() call can use this baudrate to connect.
+     */
+    ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+    checkerr(rp, ret, 1, "Setting baudrate"); 
+
+    /* Connect using current baudrate */
+    ret = TMR_connect(rp);
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
+  else
+  {
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
 
   model.value = string;
   TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
@@ -243,37 +278,7 @@ int main(int argc, char *argv[])
       ret = TMR_paramSet(rp, TMR_PARAM_REGION_ID, &region);
       checkerr(rp, ret, 1, "setting region");  
     }
-
-#ifdef TMR_ENABLE_UHF
-    /**
-     * Checking the software version of the sargas.
-     * The antenna detection is supported on sargas from software version of 5.3.x.x.
-     * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-     *  User has to pass the antenna as arguments
-     */
-    {
-      ret = isAntDetectEnabled(rp, antennaList);
-      if(TMR_ERROR_UNSUPPORTED == ret)
-      {
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-      }
-      else
-      {
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-      }
-    }
-#endif /* TMR_ENABLE_UHF */
   }
-  else
-  {
-    if (antennaList != NULL)
-      {
-        printf("Module doesn't support antenna input\n");
-        usage();
-      }
-  }
-
 {
   TMR_ReadPlan readPlan;
 #if !ENABLE_SIMPLE_READ_PLAN

@@ -1,0 +1,94 @@
+Date: 2023/05/12
+
+=========================================================
+Bare metal code organization  in MercuryAPI distribution:
+=========================================================
+
+The Mercury C API is designed to be ported and run on a wide variety
+of runtime environments, ranging from full host operating systems to
+bare-metal embedded platforms. Due to the widely varying capabilities
+of such systems and the mechanisms by which they are provided, the API
+has specific hooks in place for the services it needs. 
+
+A few operations involving time and timestamps must be provided by the
+user if they are not building on a POSIX host system. The file 'osdep.h'
+(Path : c/src/api) describes the timer and sleep functions that the host 
+must supply for correct operation of the API. The file 'osdep_<processor>.c' 
+contains stub implementations that are required for providing timer and 
+sleep functions.
+
+In order to communicate with a serial reader, the API must be provided
+with a set of routines that transmit and receive bytes, set the baud
+rate, and so on.
+ 
+The file 'tm_config.h' in the sources contains #define statements that
+enable particular features of the C API. Some features need to be
+disabled if the target platform does not have the relevant
+infrastructure support - the LLRP serial transport requires BSD
+socket-style networking, and the background reads feature requires
+POSIX threads. Disabling features will also reduce the footprint of
+the compiled code, and reducing the feature set to the minimum
+necessary is recommended for small platforms.
+
+For the BareMetal platform, BARE_METAL macro should be defined, 
+which will enable/disable below features:
+
+/**
+ * Define this to enable async read using single thread
+ */
+#define SINGLE_THREAD_ASYNC_READ
+
+/**
+ * Define this to enable support for small microcontrollers.
+ * Enabling this option will reduce the code which is not relevant to 
+ * serial readers in order to minimize the program footprint
+ * To compile for Serial Reader only.
+ *
+ * To compile for Serial Reader only, use one of the following options:
+ ** Uncomment the following define
+ ** Run make with TMR_ENABLE_SERIAL_READER_ONLY=1 defined
+ ** Add -DTMR_ENABLE_SERIAL_READER_ONLY=1 to your compiler flags
+ */ 
+#define TMR_ENABLE_SERIAL_READER_ONLY
+
+/**
+ * Define this to enable support for the GEN2 Custom Tag Operations parameters
+ * and access commands
+ */
+#undef TMR_ENABLE_GEN2_CUSTOM_TAGOPS
+
+/**
+ * Define this to enable support for the ISO180006B protocol parameters
+ * and access commands
+ */
+#undef TMR_ENABLE_ISO180006B
+
+/**
+ * Define this to enable support for background reads using native threads.
+ * This feature is also available for windows (using pthreads-win32)
+ */
+#undef TMR_ENABLE_BACKGROUND_READS
+
+/**
+ * Define this to include TMR_strerror().
+ */
+#undef TMR_ENABLE_ERROR_STRINGS
+
+/**
+ * Define this to include TMR_paramName() and TMR_paramID().
+ */
+#undef TMR_ENABLE_PARAM_STRINGS
+
+/**
+ * Enabling this option will enable the support for the parameters defined 
+ * in stdio.h header file like FILE *. This check is required as stdio.h does not
+ * exist in some of the embedded architectures.
+ */
+#undef  TMR_ENABLE_STDIO
+  
+/**
+ * Enabling  this option will enable the support for the parameters defined 
+ * in string.h header file like strerror(). This check is required as string.h does not
+ * exist in some of the embedded architectures.
+ */
+#undef  TMR_USE_STRERROR

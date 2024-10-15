@@ -1,15 +1,15 @@
 /**
- * Sample program that reads tags for a fixed period of time (500ms)
- * and prints the tags found.
- * @file read.c
+ * Sample program that performs embedded tag operation - read TID memory.
+ * @file embeddedreadtid.c
  */
-
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
+#include <tmr_utils.h>
 
 /* Enable this to use transportListener */
 #ifndef USE_TRANSPORT_LISTENER
@@ -88,7 +88,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -159,7 +163,34 @@ int main(int argc, char *argv[])
 #endif
 
   ret = TMR_connect(rp);
-  checkerr(rp, ret, 1, "connecting reader");
+  /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+   * The connection may fail if the module is configured to a different baud rate. If
+   * that is the case, the MercuryAPI tries connecting to the module with other supported
+   * baud rates until the connection is successful using baud rate probing mechanism.
+   */
+  if((ret == TMR_ERROR_TIMEOUT) && 
+     (TMR_READER_TYPE_SERIAL == rp->readerType))
+  {
+    uint32_t currentBaudRate;
+
+    /* Start probing mechanism. */
+    ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+    checkerr(rp, ret, 1, "Probe the baudrate");
+
+    /* Set the current baudrate, so that
+     * next TMR_Connect() call can use this baudrate to connect.
+     */
+    ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+    checkerr(rp, ret, 1, "Setting baudrate");
+
+    /* Connect using current baudrate */
+    ret = TMR_connect(rp);
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
+  else
+  {
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
 
 #ifdef TMR_ENABLE_UHF
   region = TMR_REGION_NONE;
@@ -225,18 +256,6 @@ int main(int argc, char *argv[])
 
       model.value = str;
       model.max = 64;
-      {
-        ret = isAntDetectEnabled(rp, antennaList);
-        if(TMR_ERROR_UNSUPPORTED == ret)
-        {
-          fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-          usage();
-        }
-        else
-        {
-          checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-        }
-      }
       TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
 
       if ((0 == strcmp("M6e", model.value)) || (0 == strcmp("M6e PRC", model.value))
@@ -298,9 +317,19 @@ int main(int argc, char *argv[])
     printf("%s\n", epcStr);
     if (0 < trd.data.len)
     {
-      char dataStr[255];
-      TMR_bytesToHex(trd.data.list, trd.data.len, dataStr);
-      printf("  data(%d): %s\n", trd.data.len, dataStr);
+      if (0x8000 == trd.data.len)
+      {
+        ret = TMR_translateErrorCode(GETU16AT(trd.data.list, 0));
+        checkerr(rp, ret, 0, "Embedded tagOp failed:");
+      }
+      else
+      {
+        char dataStr[255];
+        uint8_t dataLen = (trd.data.len / 8);
+
+        TMR_bytesToHex(trd.data.list, dataLen, dataStr);
+        printf("  data(%d): %s\n", dataLen, dataStr);
+      }
     }
   }
 #endif /* TMR_ENABLE_UHF */

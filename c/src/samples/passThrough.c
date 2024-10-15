@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 
 /* Enable this to use transportListener */
 #ifndef USE_TRANSPORT_LISTENER
@@ -93,7 +94,9 @@ int main(int argc, char *argv[])
   TMR_TransportListenerBlock tb;
 #endif
  
+#ifdef TMR_ENABLE_HF_LF
   antennaList = buffer;
+#endif /* TMR_ENABLE_HF_LF */
 
   if (argc < 2)
   {

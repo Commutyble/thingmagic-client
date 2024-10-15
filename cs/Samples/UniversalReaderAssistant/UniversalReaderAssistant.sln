@@ -1,0 +1,52 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33627.172
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniversalReaderAssistant", "UniversalReaderAssistant\UniversalReaderAssistant.csproj", "{094804CD-C842-489A-989B-0DD6155E7D1D}"
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "URABonjourSetup32", "URABonjourSetup32\URABonjourSetup32.wixproj", "{291D7866-DF7A-4B1D-8695-971E480EB11B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{094804CD-C842-489A-989B-0DD6155E7D1D} = {094804CD-C842-489A-989B-0DD6155E7D1D}
+	EndProjectSection
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "URABonjourSetup64", "URABonjourSetup64\URABonjourSetup64.wixproj", "{2085E4CC-93BB-4262-9343-B7DD456A7869}"
+	ProjectSection(ProjectDependencies) = postProject
+		{094804CD-C842-489A-989B-0DD6155E7D1D} = {094804CD-C842-489A-989B-0DD6155E7D1D}
+	EndProjectSection
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "PreBonjourx64", "PreBonjourx64\PreBonjourx64.wixproj", "{49B6974F-6EDF-47B6-81B5-588A8BC153F6}"
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "PreBonjourx86", "PreBonjourx86\PreBonjourx86.wixproj", "{EA23D4D7-53B3-40EB-A830-346C675F3131}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{094804CD-C842-489A-989B-0DD6155E7D1D}.Debug|x86.ActiveCfg = Debug|x86
+		{094804CD-C842-489A-989B-0DD6155E7D1D}.Debug|x86.Build.0 = Debug|x86
+		{094804CD-C842-489A-989B-0DD6155E7D1D}.Release|x86.ActiveCfg = Release|x86
+		{094804CD-C842-489A-989B-0DD6155E7D1D}.Release|x86.Build.0 = Release|x86
+		{291D7866-DF7A-4B1D-8695-971E480EB11B}.Debug|x86.ActiveCfg = Debug|x86
+		{291D7866-DF7A-4B1D-8695-971E480EB11B}.Debug|x86.Build.0 = Debug|x86
+		{291D7866-DF7A-4B1D-8695-971E480EB11B}.Release|x86.ActiveCfg = Release|x86
+		{291D7866-DF7A-4B1D-8695-971E480EB11B}.Release|x86.Build.0 = Release|x86
+		{2085E4CC-93BB-4262-9343-B7DD456A7869}.Debug|x86.ActiveCfg = Debug|x86
+		{2085E4CC-93BB-4262-9343-B7DD456A7869}.Debug|x86.Build.0 = Debug|x86
+		{2085E4CC-93BB-4262-9343-B7DD456A7869}.Release|x86.ActiveCfg = Release|x86
+		{2085E4CC-93BB-4262-9343-B7DD456A7869}.Release|x86.Build.0 = Release|x86
+		{49B6974F-6EDF-47B6-81B5-588A8BC153F6}.Debug|x86.ActiveCfg = Debug|x86
+		{49B6974F-6EDF-47B6-81B5-588A8BC153F6}.Debug|x86.Build.0 = Debug|x86
+		{49B6974F-6EDF-47B6-81B5-588A8BC153F6}.Release|x86.ActiveCfg = Release|x86
+		{49B6974F-6EDF-47B6-81B5-588A8BC153F6}.Release|x86.Build.0 = Release|x86
+		{EA23D4D7-53B3-40EB-A830-346C675F3131}.Debug|x86.ActiveCfg = Debug|x86
+		{EA23D4D7-53B3-40EB-A830-346C675F3131}.Debug|x86.Build.0 = Debug|x86
+		{EA23D4D7-53B3-40EB-A830-346C675F3131}.Release|x86.ActiveCfg = Release|x86
+		{EA23D4D7-53B3-40EB-A830-346C675F3131}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

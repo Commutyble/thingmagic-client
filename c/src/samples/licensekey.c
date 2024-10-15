@@ -1,7 +1,6 @@
 /**
- * Sample program that reads tags for a fixed period of time (500ms)
- * and prints the tags found.
- * @file LicenseKey.c
+ * Sample program that performs license key operations (set or erase).
+ * @file licensekey.c
  */
 
 #include <tm_reader.h>
@@ -85,7 +84,11 @@ void parseLicenseKey(uint8_t *license, uint8_t *length, char *args[])
   for (i = 0; tempLicense[i]; i = i + 2)
   {
     const char tempdata[2] = {tempLicense[i] , tempLicense[i+1]};
+#ifdef WIN32
+    sscanf(tempdata, "%2hh"SCNx8, &license[count++]);
+#else
     sscanf(tempdata, "%2"SCNx8, &license[count++]);
+#endif
   }
   license[count] = '\0';
   *length = count;
@@ -361,7 +364,7 @@ int main(int argc, char *argv[])
 #endif /* TMR_ENABLE_HF_LF */
     TMR_TagProtocolList protocols;
     TMR_TagProtocol protocolData[16];
-    char* protocolName;
+    char* protocolName = NULL;
     int i;
 
     protocols.list = protocolData;
@@ -378,12 +381,15 @@ int main(int argc, char *argv[])
         case TMR_TAG_PROTOCOL_GEN2:
           protocolName = "GEN2";
           break;
+#ifdef TMR_ENABLE_ISO180006B
         case TMR_TAG_PROTOCOL_ISO180006B:
           protocolName = "ISO18000-6B";
           break;
         case TMR_TAG_PROTOCOL_ISO180006B_UCODE:
           protocolName = "ISO18000-6B_UCODE";
           break;
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
         case TMR_TAG_PROTOCOL_IPX64:
           protocolName = "IPX64";
           break;
@@ -393,6 +399,7 @@ int main(int argc, char *argv[])
         case TMR_TAG_PROTOCOL_ATA:
           protocolName = "ATA";
           break;
+#endif /* TMR_ENABLE_GEN2_ONLY */
         case TMR_TAG_PROTOCOL_ISO14443A:
           protocolName = "ISO14443A";
           break;

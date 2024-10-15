@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -58,6 +58,39 @@ typedef enum TMR_GEN2_LockBits
   /** Kill password lock bit */
   TMR_GEN2_LOCK_BITS_KILL         = (1 << 9)
 } TMR_GEN2_LockBits;
+
+typedef enum TMR_GEN2_LockBits_Mask
+{
+  TMR_GEN2_LOCK_BITS_MASK_USER      = TMR_GEN2_LOCK_BITS_USER_PERM | TMR_GEN2_LOCK_BITS_USER,
+  TMR_GEN2_LOCK_BITS_MASK_TID       = TMR_GEN2_LOCK_BITS_TID_PERM | TMR_GEN2_LOCK_BITS_TID,
+  TMR_GEN2_LOCK_BITS_MASK_EPC       = TMR_GEN2_LOCK_BITS_EPC_PERM | TMR_GEN2_LOCK_BITS_EPC,
+  TMR_GEN2_LOCK_BITS_MASK_ACCESS    = TMR_GEN2_LOCK_BITS_ACCESS_PERM | TMR_GEN2_LOCK_BITS_ACCESS,
+  TMR_GEN2_LOCK_BITS_MASK_KILL      = TMR_GEN2_LOCK_BITS_KILL_PERM | TMR_GEN2_LOCK_BITS_KILL
+} TMR_GEN2_LockBits_Mask;
+
+typedef enum TMR_GEN2_LockBits_Action
+{
+  TMR_GEN2_LOCK_BITS_ACTION_USER_LOCK = TMR_GEN2_LOCK_BITS_USER,
+  TMR_GEN2_LOCK_BITS_ACTION_USER_UNLOCK = 0,
+  TMR_GEN2_LOCK_BITS_ACTION_USER_PERMALOCK = TMR_GEN2_LOCK_BITS_USER_PERM | TMR_GEN2_LOCK_BITS_USER,
+  TMR_GEN2_LOCK_BITS_ACTION_USER_PERMAUNLOCK = TMR_GEN2_LOCK_BITS_USER_PERM,
+  TMR_GEN2_LOCK_BITS_ACTION_TID_LOCK = TMR_GEN2_LOCK_BITS_TID,
+  TMR_GEN2_LOCK_BITS_ACTION_TID_UNLOCK = 0,  
+  TMR_GEN2_LOCK_BITS_ACTION_TID_PERMALOCK = TMR_GEN2_LOCK_BITS_TID_PERM | TMR_GEN2_LOCK_BITS_TID,
+  TMR_GEN2_LOCK_BITS_ACTION_TID_PERMAUNLOCK = TMR_GEN2_LOCK_BITS_TID_PERM,
+  TMR_GEN2_LOCK_BITS_ACTION_EPC_LOCK = TMR_GEN2_LOCK_BITS_EPC,
+  TMR_GEN2_LOCK_BITS_ACTION_EPC_UNLOCK = 0,   
+  TMR_GEN2_LOCK_BITS_ACTION_EPC_PERMALOCK = TMR_GEN2_LOCK_BITS_EPC_PERM | TMR_GEN2_LOCK_BITS_EPC,
+  TMR_GEN2_LOCK_BITS_ACTION_EPC_PERMAUNLOCK = TMR_GEN2_LOCK_BITS_EPC_PERM,
+  TMR_GEN2_LOCK_BITS_ACTION_ACCESS_LOCK = TMR_GEN2_LOCK_BITS_ACCESS,
+  TMR_GEN2_LOCK_BITS_ACTION_ACCESS_UNLOCK = 0,
+  TMR_GEN2_LOCK_BITS_ACTION_ACCESS_PERMALOCK = TMR_GEN2_LOCK_BITS_ACCESS_PERM | TMR_GEN2_LOCK_BITS_ACCESS,
+  TMR_GEN2_LOCK_BITS_ACTION_ACCESS_PERMAUNLOCK = TMR_GEN2_LOCK_BITS_ACCESS_PERM,
+  TMR_GEN2_LOCK_BITS_ACTION_KILL_LOCK = TMR_GEN2_LOCK_BITS_KILL,
+  TMR_GEN2_LOCK_BITS_ACTION_KILL_UNLOCK = 0,
+  TMR_GEN2_LOCK_BITS_ACTION_KILL_PERMALOCK = TMR_GEN2_LOCK_BITS_KILL_PERM | TMR_GEN2_LOCK_BITS_KILL,
+  TMR_GEN2_LOCK_BITS_ACTION_KILL_PERMAUNLOCK = TMR_GEN2_LOCK_BITS_KILL_PERM
+} TMR_GEN2_LockBits_Action;
 
 /**
  * The arguments to a TMR_lockTag() method for Gen2 tags. 
@@ -290,6 +323,27 @@ typedef enum TMR_GEN2_LinkFrequency
   TMR_GEN2_LINKFREQUENCY_INVALID = TMR_GEN2_LINKFREQUENCY_MAX + 1,
 } TMR_GEN2_LinkFrequency;
 
+/** Gen2 RF Mode values */
+typedef enum TMR_GEN2_RFMode
+{
+  /** Sets 160KHZ BLF, M8 TagEncoding and 20us Tari */
+  TMR_GEN2_RFMODE_160_M8_20   = 285,
+  /** Sets 250KHZ BLF, M4 TagEncoding and 20us Tari */
+  TMR_GEN2_RFMODE_250_M4_20   = 244,
+  /** Sets 320KHZ BLF, M2 TagEncoding and 15us Tari */
+  TMR_GEN2_RFMODE_320_M2_15   = 223,
+  /** Sets 320KHZ BLF, M2 TagEncoding and 20us Tari */
+  TMR_GEN2_RFMODE_320_M2_20   = 222,
+  /** Sets 320KHZ BLF, M4 TagEncoding and 20us Tari */
+  TMR_GEN2_RFMODE_320_M4_20   = 241,
+  /** Sets 640KHZ BLF, FM0 TagEncoding and 7.5us Tari */
+  TMR_GEN2_RFMODE_640_FM0_7_5 = 302,
+  /** Sets 640KHZ BLF, M2 TagEncoding and 7.5us Tari */
+  TMR_GEN2_RFMODE_640_M2_7_5  = 323,
+  /** Sets 640KHZ BLF, M4 TagEncoding and 7.5us Tari */
+  TMR_GEN2_RFMODE_640_M4_7_5  = 344,
+} TMR_GEN2_RFMode;
+
 /** Gen2 Protocol Extension parameters */
 typedef enum TMR_GEN2_ProtocolExtension
 {
@@ -345,10 +399,10 @@ typedef enum TMR_GEN2_UNTRACEABLE_Range
 {
 	/* Tag persistently enables normal operating range */
 	NORMAL = 0,
-	/*Tag persistently enables reduced operating range.*/
-	REDUCED = 1,
 	/* Tag temporarily toggles its operating range*/
-	TOGGLE_TEMPORARLY = 2,
+	TOGGLE_TEMPORARILY = 1,
+	/*Tag persistently enables reduced operating range.*/
+	REDUCED = 2,
 	/* RFU */
 	RFU = 3
 }TMR_GEN2_UNTRACEABLE_Range;
@@ -363,14 +417,19 @@ typedef enum TMR_NXP_KeyId
 }TMR_NXP_KeyId;
 
 /** Memory profile for the addition of custom data */
+
+/*Note- TMR_NXP_Profile names are changed (ex- from 'EPC' to 'TMR_NXP_Profile_EPC')
+ * as part of Bug#8976 fix (Because of the conflicting macro name "EPC".
+ * It's the name of an ESP32 register, so we shouldn't use it without a unique prefix).
+ */
 typedef enum TMR_NXP_Profile
 {
 	/* EPC memory bank */
-	EPC = 0,
+	TMR_NXP_Profile_EPC = 0,
 	/* TID memory bank */
-	TID = 1,
+	TMR_NXP_Profile_TID = 1,
 	/* User memory bank */
-	USER = 2
+	TMR_NXP_Profile_USER = 2
 }TMR_NXP_Profile;
 
 /** Gen2 Tari values */

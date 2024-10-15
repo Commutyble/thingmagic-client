@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -76,9 +76,7 @@ typedef enum TMR_SR_UserConfigOperation
 /**  Save operation */
 TMR_USERCONFIG_SAVE = 0x01,     
 /**  Restore operation */
-TMR_USERCONFIG_RESTORE = 0x02, 
-/**  Verify operation */
-TMR_USERCONFIG_VERIFY = 0x03,  
+TMR_USERCONFIG_RESTORE = 0x02,
 /** Clear operation  */
 TMR_USERCONFIG_CLEAR = 0x04,
 /** Save read plan configuration */
@@ -125,14 +123,15 @@ typedef struct TMR_SR_UserConfigOp
  */
 typedef enum TMR_SR_UserMode
 {
-  TMR_SR_USER_MODE_MIN      = 0,
-  TMR_SR_USER_MODE_UNSPEC   = 0,
-  TMR_SR_USER_MODE_PRINTER  = 1,
-  TMR_SR_USER_MODE_CONVEYOR = 2,
-  TMR_SR_USER_MODE_PORTAL   = 3,
-  TMR_SR_USER_MODE_HANDHELD = 4,
-  TMR_SR_USER_MODE_MAX      = TMR_SR_USER_MODE_HANDHELD,
-  TMR_SR_USER_MODE_INVALID  = TMR_SR_USER_MODE_MAX + 1,
+  TMR_SR_USER_MODE_MIN             = 0,
+  TMR_SR_USER_MODE_DEFAULT         = 0,
+  TMR_SR_USER_MODE_PRINTER         = 1,
+  TMR_SR_USER_MODE_CONVEYOR        = 2,
+  TMR_SR_USER_MODE_PORTAL          = 3,
+  TMR_SR_USER_MODE_MEDICAL_CABINET = 4,
+  TMR_SR_USER_MODE_OPEN            = 255,
+  TMR_SR_USER_MODE_MAX             = TMR_SR_USER_MODE_OPEN,
+  TMR_SR_USER_MODE_INVALID         = TMR_SR_USER_MODE_MAX + 1,
 }TMR_SR_UserMode;
 #endif /* TMR_ENABLE_UHF */
 /** An antenna port with an associated int32_t value. */
@@ -229,9 +228,6 @@ typedef struct TM_SR_SerialReader
 
   /* User-configurable values */
   uint32_t baudRate;
-  /* Check if user has set baudrate explicitly */
-  bool isUserBaudRateSet;
-
   TMR_AntennaMapList *txRxMap;
   TMR_AntennaMapList *defaultTxRxMap;
 #ifdef TMR_ENABLE_UHF
@@ -296,8 +292,10 @@ typedef struct TM_SR_SerialReader
   bool userEnableReadFiltering;
   /* Option to use the user specified transportTimeout */
   bool usrTimeoutEnable;
+#if TMR_ENABLE_CRC
   /* TransportType */
   TMR_TransportType transportType;
+#endif /* TMR_ENABLE_CRC */
   /* baud rates to be used for serial communication */
   TMR_uint32List probeBaudRates;
   /* storage for the probe baud rates */
@@ -311,21 +309,22 @@ typedef struct TM_SR_SerialReader
 #ifdef TMR_ENABLE_UHF
   /* Enable CRC calculation */
   bool crcEnabled;
+#if TMR_ENABLE_WAKE_PREAMBLES
   /* Option to enable or disable the pre-amble */
   bool supportsPreamble;
+#endif /* TMR_ENABLE_WAKE_PREAMBLES */
   /* Cache extendedEPC setting */
   bool extendedEPC;
   /*Gen2 Q Value from previous tagop */
   TMR_SR_GEN2_Q oldQ;
   /*Gen2 WriteMode*/
   TMR_GEN2_WriteMode writeMode;
-  /* Read filter timeout */
-  int32_t readFilterTimeout;
   /* Option for Gen2 all memory bank read */
   bool gen2AllMemoryBankEnabled;
   /* option for Gen2 Bap parameter */
   bool isBapEnabled;
 #endif /* TMR_ENABLE_UHF */
+  bool isM6eFamily;
 } TMR_SR_SerialReader;
 #ifdef TMR_ENABLE_UHF
 /**
@@ -444,10 +443,10 @@ TMR_Status TMR_SR_readTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter
                               uint16_t count, uint16_t *data);
 TMR_Status TMR_SR_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                uint32_t bank, uint32_t address,
-                               uint16_t count, const uint8_t data[]);
+                               uint16_t count, const uint8_t data[], TMR_uint8List* response);
 TMR_Status TMR_SR_writeTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                uint32_t bank, uint32_t address,
-                               uint16_t count, const uint16_t data[]);
+                               uint16_t count, const uint16_t data[], TMR_uint8List* response);
 #endif /* TMR_ENABLE_UHF */
 TMR_Status TMR_SR_gpoSet(struct TMR_Reader *reader, uint8_t count, const TMR_GpioPin state[]);
 TMR_Status TMR_SR_gpiGet(struct TMR_Reader *reader, uint8_t *count, TMR_GpioPin state[]);
@@ -463,6 +462,7 @@ TMR_Status TMR_SR_reboot(struct TMR_Reader *reader);
  * structure must be initialized before calling this.
  */
 TMR_Status TMR_SR_SerialReader_init(TMR_Reader *reader);
+TMR_Status initTxRxMapFromPorts(TMR_Reader* reader);
 
 #ifdef __cplusplus
 }

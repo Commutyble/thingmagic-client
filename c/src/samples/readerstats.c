@@ -3,17 +3,27 @@
  * It shows both the sync and async way of getting the reader stats.
  * @file readerstats.c
  */
-
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
+#ifndef BARE_METAL
 #ifndef WIN32
 #include <unistd.h>
 #endif
+#endif /* BARE_METAL */
 
+ /* Change total read time here */
+#define READ_TIME 5000 //In ms
+
+#ifdef BARE_METAL
+  #define printf(...) {}
+#endif
+
+#ifndef BARE_METAL
 #if WIN32
 #define snprintf sprintf_s
 #endif
@@ -38,15 +48,19 @@ void errx(int exitval, const char *fmt, ...)
 
   exit(exitval);
 }
+#endif /* BARE_METAL */
 
 void checkerr(TMR_Reader* rp, TMR_Status ret, int exitval, const char *msg)
 {
+#ifndef BARE_METAL
   if (TMR_SUCCESS != ret)
   {
     errx(exitval, "Error %s: %s\n", msg, TMR_strerr(rp, ret));
   }
+#endif /* BARE_METAL */
 }
 
+#ifdef USE_TRANSPORT_LISTENER
 void serialPrinter(bool tx, uint32_t dataLen, const uint8_t data[],
                    uint32_t timeout, void *cookie)
 {
@@ -72,7 +86,9 @@ void stringPrinter(bool tx,uint32_t dataLen, const uint8_t data[],uint32_t timeo
   fprintf(out, "%s", tx ? "Sending: " : "Received:");
   fprintf(out, "%s\n", data);
 }
+#endif /* USE_TRANSPORT_LISTENER */
 
+#ifndef BARE_METAL
 void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 {
   char *token = NULL;
@@ -96,7 +112,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -107,6 +127,7 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
   }
   *antennaCount = i;
 }
+#endif /* BARE_METAL */
 
 void callback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie);
 void exceptionCallback(TMR_Reader *reader, TMR_Status error, void *cookie);
@@ -122,16 +143,20 @@ static const char* protocolName(enum TMR_TagProtocol value)
     return "NONE";
   case TMR_TAG_PROTOCOL_GEN2:
     return "GEN2";
+#ifdef TMR_ENABLE_ISO180006B
   case TMR_TAG_PROTOCOL_ISO180006B:
     return "ISO180006B";
   case TMR_TAG_PROTOCOL_ISO180006B_UCODE:
     return "ISO180006B_UCODE";
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
   case TMR_TAG_PROTOCOL_IPX64:
     return "IPX64";
   case TMR_TAG_PROTOCOL_IPX256:
     return "IPX256";
   case TMR_TAG_PROTOCOL_ATA:
 	return "ATA";
+#endif /* TMR_ENABLE_GEN2_ONLY */
   case TMR_TAG_PROTOCOL_ISO14443A:
     return "ISO14443A";
   case TMR_TAG_PROTOCOL_ISO15693:
@@ -208,32 +233,22 @@ void parseReaderStas(const TMR_Reader_StatsValues *stats)
     printf("currentAntenna %d\n", stats->antenna);
   }
 #endif /* TMR_ENABLE_UHF */
-
-#ifdef TMR_ENABLE_HF_LF
-  if (TMR_READER_STATS_FLAG_DC_VOLTAGE & stats->valid)
-  {
-    printf("DC Voltage %d(mV)\n", stats->dcVoltage);
-  }
-#endif /* TMR_ENABLE_HF_LF */
 }
+
+#ifdef BARE_METAL
+uint32_t totalTagRcved   = 0;
+bool stopReadCommandSent = false;
+
+TMR_Status
+parseSingleThreadedResponse(TMR_Reader* rp, uint32_t readTime);
+#endif /* BARE_METAL */
 
 int main(int argc, char *argv[])
 {
-
-#ifndef TMR_ENABLE_BACKGROUND_READS
-  errx(1, "This sample requires background read functionality.\n"
-          "Please enable TMR_ENABLE_BACKGROUND_READS in tm_config.h\n"
-          "to run this codelet\n");
-  return -1;
-#else
-
   TMR_Reader r, *rp;
   TMR_Status ret;
   uint8_t *antennaList = NULL;
   uint8_t antennaCount = 0x0;
-#if USE_TRANSPORT_LISTENER
-  TMR_TransportListenerBlock tb;
-#endif
   TMR_ReadPlan plan;
   TMR_ReadListenerBlock rlb;
   TMR_ReadExceptionListenerBlock reb;
@@ -244,6 +259,12 @@ int main(int argc, char *argv[])
   char string[100];
   TMR_String model;
 
+#if USE_TRANSPORT_LISTENER
+  TMR_TransportListenerBlock tb;
+#endif /* USE_TRANSPORT_LISTENER */
+  rp = &r;
+
+#ifndef BARE_METAL
   if (argc < 2)
   {
     usage();
@@ -267,10 +288,17 @@ int main(int argc, char *argv[])
       usage();
     }
   }
-
-  rp = &r;
   ret = TMR_create(rp, argv[1]);
   checkerr(rp, ret, 1, "creating reader");
+#else
+  ret = TMR_create(rp, "tmr:///com1");
+
+#ifdef TMR_ENABLE_UHF
+  buffer[0] = 1;
+  antennaList = buffer;
+  antennaCount = 0x01;
+#endif /* TMR_ENABLE_UHF */
+#endif /* BARE_METAL */
 
 #if USE_TRANSPORT_LISTENER
 
@@ -285,10 +313,37 @@ int main(int argc, char *argv[])
   tb.cookie = stdout;
 
   TMR_addTransportListener(rp, &tb);
-#endif
+#endif /* USE_TRANSPORT_LISTENER */
 
   ret = TMR_connect(rp);
-  checkerr(rp, ret, 1, "connecting reader");
+  /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+   * The connection may fail if the module is configured to a different baud rate. If
+   * that is the case, the MercuryAPI tries connecting to the module with other supported
+   * baud rates until the connection is successful using baud rate probing mechanism.
+   */
+  if((ret == TMR_ERROR_TIMEOUT) && 
+     (TMR_READER_TYPE_SERIAL == rp->readerType))
+  {
+    uint32_t currentBaudRate;
+
+    /* Start probing mechanism. */
+    ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+    checkerr(rp, ret, 1, "Probe the baudrate");
+
+    /* Set the current baudrate, so that 
+     * next TMR_Connect() call can use this baudrate to connect.
+     */
+    ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+    checkerr(rp, ret, 1, "Setting baudrate"); 
+
+    /* Connect using current baudrate */
+    ret = TMR_connect(rp);
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
+  else
+  {
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
 
   model.value = string;
   model.max   = sizeof(string);
@@ -322,44 +377,15 @@ int main(int argc, char *argv[])
     }
 
 #ifdef TMR_ENABLE_UHF
-    /**
-     * Checking the software version of the sargas.
-     * The antenna detection is supported on sargas from software version of 5.3.x.x.
-     * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-     * User has to pass the antenna as arguments.
-     */
     {
       bool checkPort = true;
-
-      ret = isAntDetectEnabled(rp, antennaList);
-      if(TMR_ERROR_UNSUPPORTED == ret)
-      {
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-      }
-      else
-      {
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-      }
       
-      if (((0 == strcmp("M6e Micro USB", model.value)) || (0 == strcmp("M6e Micro USBPro", model.value))
-         ||(0 == strcmp("M6e Micro", model.value))))
-      {
-        checkPort = true;
-        TMR_paramSet(rp, TMR_PARAM_ANTENNA_CHECKPORT, &checkPort);
-        checkerr(rp, ret, 1, "setting antenna checkport");
-      }
+      ret = TMR_paramSet(rp, TMR_PARAM_ANTENNA_CHECKPORT, &checkPort);
+      checkerr(rp, ret, 1, "setting antenna checkport");
     }
 #endif /* TMR_ENABLE_UHF */
   }
-  else
-  {
-    if (antennaList != NULL)
-      {
-        printf("Module doesn't support antenna input\n");
-        usage();
-      }
-  }
+
   /**
   * for antenna configuration we need two parameters
   * 1. antennaCount : specifies the no of antennas should
@@ -395,7 +421,9 @@ int main(int argc, char *argv[])
 #endif /* TMR_ENABLE_UHF */
     int j;
 
+
     printf("\nReader stats after the sync read\n");
+
 
     /** request for the statics fields of your interest, before search
       * Temperature and Antenna port stats are mandatory for TMReader and it don't allow to disable these two flags
@@ -403,7 +431,7 @@ int main(int argc, char *argv[])
     setFlag = TMR_READER_STATS_FLAG_ALL;
 
     ret = TMR_paramSet(rp, TMR_PARAM_READER_STATS_ENABLE, &setFlag);
-    checkerr(rp, ret, 1, "setting the  fields");
+    checkerr(rp, ret, 1, "Setting the reader stats flag");
 
     for (j = 1; j < 4; j++)
     {
@@ -417,13 +445,17 @@ int main(int argc, char *argv[])
        * Individual search will reset the reader stats, before doing the search
        */
       printf("Performing the search operation. for 1 sec\n");
+
+
       ret = TMR_read(rp, 1000, NULL);
       if (TMR_ERROR_TAG_ID_BUFFER_FULL == ret)
       {
         /* In case of TAG ID Buffer Full, extract the tags present
         * in buffer.
         */
+#ifndef BARE_METAL
         fprintf(stdout, "reading tags:%s\n", TMR_strerr(rp, ret));
+#endif /* BARE_METAL */
       }
       else
       {
@@ -439,6 +471,7 @@ int main(int argc, char *argv[])
         checkerr(rp, ret, 1, "fetching tag");
         TMR_bytesToHex(trd.tag.epc, trd.tag.epcByteCount, epcStr);
         printf("EPC: %s \n", epcStr);
+
        }
 
 #ifdef TMR_ENABLE_UHF
@@ -464,6 +497,7 @@ int main(int argc, char *argv[])
         checkerr(rp, ret, 1, "getting the antenna return loss");
 
         printf("Antenna Return Loss\n");
+
         for (i = 0; i < value.len && i < value.max; i++)
         {
           printf("Antenna %d | %d \n", value.list[i].port, value.list[i].value);
@@ -497,15 +531,18 @@ int main(int argc, char *argv[])
 
     printf("\nReader stats after the async read \n");
 
+
     /** request for the statics fields of your interest, before search */
     ret = TMR_paramSet(rp, TMR_PARAM_READER_STATS_ENABLE, &setFlag);
     checkerr(rp, ret, 1, "setting the  fields");
 
     printf("Initiating the search operation. for 1 sec and the listener will provide the reader stats\n");
 
+
     ret = TMR_startReading(rp);
     checkerr(rp, ret, 1, "starting reading");
 
+#ifndef BARE_METAL
 #ifndef WIN32
     sleep(1);
 #else
@@ -514,11 +551,13 @@ int main(int argc, char *argv[])
 
     ret = TMR_stopReading(rp);
     checkerr(rp, ret, 1, "stopping reading");
+#else
+    parseSingleThreadedResponse(rp, READ_TIME);
+#endif /* BARE_METAL */
   }
 
   TMR_destroy(rp);
   return 0;
-#endif /* TMR_ENABLE_BACKGROUND_READS */
 }
 
 void
@@ -528,15 +567,84 @@ callback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
 
   TMR_bytesToHex(t->tag.epc, t->tag.epcByteCount, epcStr);
   printf("Background read: %s\n", epcStr);
+
 }
 
 void 
 exceptionCallback(TMR_Reader *reader, TMR_Status error, void *cookie)
 {
+#ifndef BARE_METAL
   fprintf(stdout, "Error:%s\n", TMR_strerr(reader, error));
+#endif /* BARE_METAL */
 }
 
 void statsCallback (TMR_Reader *reader, const TMR_Reader_StatsValues* stats, void *cookie)
 {
+#ifndef BARE_METAL
   parseReaderStas(stats);
+#endif /* BARE_METAL */
 }
+
+#ifdef BARE_METAL
+TMR_Status
+parseSingleThreadedResponse(TMR_Reader* rp, uint32_t readTime)
+{
+  TMR_Status ret = TMR_SUCCESS;
+  uint32_t elapsedTime = 0;
+  uint64_t startTime = tmr_gettime();
+
+  while (true)
+  {
+    TMR_TagReadData trd;
+
+    ret = TMR_hasMoreTags(rp);
+    if (TMR_SUCCESS == ret)
+    {
+      if (false == rp->isStatusResponse)
+      {
+        TMR_TagReadData trd;
+
+        TMR_getNextTag(rp, &trd);
+        notify_read_listeners(rp, &trd);
+        totalTagRcved++;
+      }
+      else
+      {
+        TMR_Reader_StatsValues stats;
+        TMR_SR_SerialReader* sr;
+
+        sr = &rp->u.serialReader;
+        TMR_STATS_init(&stats);
+
+        TMR_parseTagStats(rp, &stats, sr->bufResponse, sr->bufPointer);
+        notify_stats_listeners(rp, &stats);
+      }
+    }
+    else if (TMR_ERROR_END_OF_READING == ret)
+    {
+      break;
+    }
+    else
+    {
+      if (TMR_ERROR_NO_TAGS != ret)
+      {
+        notify_exception_listeners(rp, ret);
+      }
+    }
+
+    elapsedTime = tmr_gettime() - startTime;
+
+    if ((elapsedTime > readTime) && (!stopReadCommandSent))
+    {
+      ret = TMR_stopReading(rp);
+      if (TMR_SUCCESS == ret)
+      {
+        stopReadCommandSent = true;
+      }
+    }
+  }
+  reset_continuous_reading(rp);
+  
+  return TMR_SUCCESS;
+}
+#endif /* BARE_METAL */

@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -59,7 +59,6 @@ typedef enum TMR_SR_OpCode
   TMR_SR_OPCODE_WRITE_FLASH_SECTOR      = 0x0D,
   TMR_SR_OPCODE_GET_SECTOR_SIZE         = 0x0E,
   TMR_SR_OPCODE_MODIFY_FLASH_SECTOR     = 0x0F,
-  TMR_SR_OPCODE_READ_TAG_ID_SINGLE      = 0x21,
   TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE    = 0x22,
 #ifdef TMR_ENABLE_UHF
   TMR_SR_OPCODE_WRITE_TAG_ID            = 0x23,
@@ -126,8 +125,9 @@ typedef enum TMR_SR_OpCode
 #ifdef TMR_ENABLE_HF_LF
 typedef enum TMR_SR_SelectSingulationOptions
 {
-  TMR_SR_SINGULATION_OPTION_SELECT_ON_UID = 0x01,
+  TMR_SR_SINGULATION_OPTION_SELECT_ON_UID     = 0x01,
   TMR_SR_SINGULATION_OPTION_SELECT_ON_TAGTYPE = 0x02,
+  TMR_SR_SINGULATION_OPTION_EXT_TAGOP_PARAMS  = 0x04,
 }TMR_SR_SelectSingulationOptions;
 #endif /* TMR_ENABLE_HF_LF */
 
@@ -147,8 +147,8 @@ typedef enum TMR_SR_Gen2
   TMR_SR_GEN2_SINGULATION_OPTION_FLAG_METADATA           = 0x10,
 #ifdef TMR_ENABLE_UHF
   TMR_SR_GEN2_SINGULATION_OPTION_EXTENDED_DATA_LENGTH    = 0x20,
-  TMR_SR_GEN2_SINGULATION_OPTION_SECURE_READ_DATA        = 0x40
 #endif /* TMR_ENABLE_UHF */
+  TMR_SR_GEN2_SINGULATION_OPTION_SECURE_READ_DATA        = 0x40
 }TMR_SR_Gen2SingulationOptions;
 
 #ifdef TMR_ENABLE_UHF
@@ -161,14 +161,11 @@ typedef enum TMR_SR_TagidOption
 
 typedef enum TMR_SR_ModelHardwareID
 {
-  TMR_SR_MODEL_M5E         = 0x00,
-  TMR_SR_MODEL_M5E_COMPACT = 0x01,
-  TMR_SR_MODEL_M5E_I       = 0x02,
-  TMR_SR_MODEL_M4E         = 0x03,
   TMR_SR_MODEL_M6E         = 0x18,
   TMR_SR_MODEL_M6E_I	   = 0x19,
   TMR_SR_MODEL_MICRO       = 0x20,
   TMR_SR_MODEL_M6E_NANO    = 0x30,
+  TMR_SR_MODEL_M7E         = 0x38,
   TMR_SR_MODEL_M3E         = 0x80,
   TMR_SR_MODEL_UNKNOWN     = 0xFF,
 } TMR_SR_ModelHardwareID;
@@ -181,6 +178,16 @@ typedef enum TMR_SR_ModelM3E
 #endif /* TMR_ENABLE_HF_LF */
 
 #ifdef TMR_ENABLE_UHF
+typedef enum TMR_SR_ModelM7E
+{
+  //M7e variants
+  TMR_SR_MODEL_M7E_PICO  = 0x00,
+  TMR_SR_MODEL_M7E_DEKA  = 0x01,
+  TMR_SR_MODEL_M7E_HECTO = 0x02,
+  TMR_SR_MODEL_M7E_MEGA  = 0x03,
+  TMR_SR_MODEL_M7E_TERA  = 0x04,
+}TMR_SR_ModelM7E;
+
 typedef enum TMR_SR_ModelMicro
 {
   TMR_SR_MODEL_M6E_MICRO     = 0x01,
@@ -194,14 +201,6 @@ typedef enum TMR_SR_ModelM6E_I
   TMR_SR_MODEL_M6E_I_PRC  = 0x02,
   TMR_SR_MODEL_M6E_I_JIC  = 0x03,
 }TMR_SR_ModelM6E_I;
-
-typedef enum TMR_SR_ModelM5EInternational
-{
-  TMR_SR_MODEL_M5E_I_REV_EU  = 0x01,
-  TMR_SR_MODEL_M5E_I_REV_NA  = 0x02,
-  TMR_SR_MODEL_M5E_I_REV_JP  = 0x03,
-  TMR_SR_MODEL_M5E_I_REV_PRC = 0x04,
-}TMR_SR_ModelM5EInternational;
 #endif /* TMR_ENABLE_UHF */
 
 typedef enum TMR_SR_ProductGroupID
@@ -237,18 +236,17 @@ TMR_Status TMR_SR_sendMessage(TMR_Reader *reader, uint8_t *data,
 TMR_Status TMR_SR_receiveMessage(TMR_Reader *reader, uint8_t *data,
                                  uint8_t opcode, uint32_t timeoutMs);
 TMR_Status TMR_SR_receiveAutonomousReading(struct TMR_Reader *reader, TMR_TagReadData *trd, TMR_Reader_StatsValues *stats);
-void TMR_SR_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *read, uint16_t flags,
+TMR_Status TMR_SR_parseMetadataFromMessage(TMR_Reader *reader, TMR_TagReadData *read, uint16_t flags,
                                      uint8_t *i, uint8_t msg[]);
 #ifdef TMR_ENABLE_UHF
-void extractGen2MemoryBankValues(TMR_TagReadData *read);
+TMR_Status extractGen2MemoryBankValues(TMR_TagReadData *read);
 #endif /* TMR_ENABLE_UHF */
 
-void
+TMR_Status 
 TMR_SR_parseMetadataOnly(TMR_Reader *reader, TMR_TagReadData *read, uint16_t flags,
                                 uint8_t *i, uint8_t msg[]);
 void TMR_SR_postprocessReaderSpecificMetadata(TMR_TagReadData *read,
                                               TMR_SR_SerialReader *sr);
-bool isContinuousReadParamSupported(TMR_Reader *reader);
 
 /**
  * This structure is returned from read tag multiple embedded commands.
@@ -262,19 +260,6 @@ typedef struct TMR_SR_MultipleStatus
   /** The number of tags for which the embedded operation failed. */
   uint16_t failureCount;
 }TMR_SR_MultipleStatus;
-
-/**
- * This structure is returned from TMR_SR_cmdGetTxRxPorts and
- * TMR_SR_cmdGetAntennaSearchList, and passed as a parameter to
- * TMR_SR_cmdSetAntennaSearchList.
- */
-typedef struct TMR_SR_PortPair
-{
-  /** The transmit port. */
-  uint8_t txPort;
-  /** The receive port. */
-  uint8_t rxPort;
-}TMR_SR_PortPair;
 
 /**
  * This structure is returned from TMR_SR_cmdAntennaDetect.
@@ -396,18 +381,7 @@ typedef enum TMR_SR_Configuration
    *  1: Enable -- Different Antenna creates a new record.
    */
   TMR_SR_CONFIGURATION_UNIQUE_BY_ANTENNA        = 0,
-  /**
-   *  Run transmitter in lower-performance, power-saving mode.
-   *  0: Disable -- Higher transmitter bias for improved reader sensitivity
-   *  1: Enable -- Lower transmitter bias sacrifices sensitivity for power consumption
-   */
-  TMR_SR_CONFIGURATION_TRANSMIT_POWER_SAVE      = 1,
-  /**
-   *  Support 496-bit EPCs (vs normal max 96 bits)
-   *  0: Disable (max max EPC length = 96)
-   *  1: Enable 496-bit EPCs
-   */
-  TMR_SR_CONFIGURATION_EXTENDED_EPC             = 2,
+#endif /* TMR_ENABLE_UHF */
   /**
    *  Configure GPOs to drive antenna switch.
    *  0: No switch
@@ -416,6 +390,7 @@ typedef enum TMR_SR_Configuration
    *  3: Switch on GPO1,GPO2
    */
   TMR_SR_CONFIGURATION_ANTENNA_CONTROL_GPIO     = 3,
+#ifdef TMR_ENABLE_UHF
   /**
    *  Refuse to transmit if antenna is not detected
    */
@@ -438,11 +413,6 @@ typedef enum TMR_SR_Configuration
    *  1: Enable -- Different data creates new record.
    */
   TMR_SR_CONFIGURATION_UNIQUE_BY_DATA           = 8,
-  /**
-   *  Whether RSSI values are reported in dBm, as opposed to
-   *  arbitrary uncalibrated units.
-   */
-  TMR_SR_CONFIGURATION_RSSI_IN_DBM              = 9,
   /**
    *  Self jammer cancellation
    *  User can enable/disable through level2 API
@@ -483,7 +453,6 @@ typedef enum TMR_SR_Configuration
   TMR_SR_CONFIGURATION_PRODUCT_GROUP_ID         = 0x12,
   /**
    * Product ID (Group ID 0x0002 ) information
-   * 0x0001 :M5e-C USB reader
    * 0x0002 :Backback NA antenna
    * 0x0003 :Backback EU antenna
    **/
@@ -540,7 +509,8 @@ typedef enum TMR_SR_Gen2Configuration
   /* option to set/get "Initial Q" */
   TMR_SR_GEN2_INITIAL_Q = 0x16,
   /* option to set/get Send-Select-With-Every-Query flag */
-  TMR_SR_GEN2_SEND_SELECT = 0x17
+  TMR_SR_GEN2_SEND_SELECT = 0x17,
+  TMR_SR_GEN2_CONFIGURATION_RFMODE = 0x18,
 } TMR_SR_Gen2Configuration;
 
 /**
@@ -775,14 +745,14 @@ TMR_Status TMR_SR_cmdReadTagMultiple(TMR_Reader *reader, uint16_t timeout,
 
 #ifdef TMR_ENABLE_UHF
 TMR_Status TMR_SR_cmdWriteGen2TagEpc(TMR_Reader *reader, const TMR_TagFilter *filter, TMR_GEN2_Password accessPassword,
-			uint16_t timeout, uint8_t count, const uint8_t *id, bool lock);
+			uint16_t timeout, uint8_t count, const uint8_t *id, bool lock, TMR_uint8List* response);
 TMR_Status TMR_SR_cmdReadAfterWriteGen2TagEpc(TMR_Reader *reader, const TMR_TagFilter *filter, TMR_GEN2_Password accessPassword, 
             uint16_t timeout, uint8_t count, const uint8_t *id, bool lock, uint32_t readBank,
             uint32_t readAddress, uint8_t readLen, TMR_TagReadData *read);
 TMR_Status TMR_SR_cmdGEN2WriteTagData(TMR_Reader *reader,
             uint16_t timeout, TMR_GEN2_Bank bank, uint32_t address,
             uint8_t count, const uint8_t data[],
-            TMR_GEN2_Password accessPassword, const TMR_TagFilter *filter);
+            TMR_GEN2_Password accessPassword, const TMR_TagFilter *filter, TMR_uint8List* response);
 TMR_Status TMR_SR_cmdGEN2ReadAfterWriteTagData(TMR_Reader *reader, uint16_t timeout, TMR_GEN2_Bank writeBank, uint32_t writeAddress,
             uint16_t count, const uint8_t data[], TMR_GEN2_Password accessPassword, const TMR_TagFilter *filter,
             TMR_GEN2_Bank readBank, uint32_t readAddress, uint8_t readLen, TMR_TagReadData *read);
@@ -934,11 +904,10 @@ TMR_Status TMR_SR_cmdHibikiWriteMultipleWords(TMR_Reader *reader,
             const uint8_t data[]);
 TMR_Status TMR_SR_cmdEraseBlockTagSpecific(TMR_Reader *reader, uint16_t timeout,
             TMR_GEN2_Bank bank, uint32_t address, uint8_t count);
-TMR_Status TMR_SR_cmdGetTxRxPorts(TMR_Reader *reader, TMR_SR_PortPair *ant);
 TMR_Status TMR_SR_cmdGetAntennaConfiguration(TMR_Reader *reader,
             TMR_SR_AntennaPort *config);
 TMR_Status TMR_SR_cmdGetAntennaSearchList(TMR_Reader *reader, uint8_t *count,
-            TMR_SR_PortPair *ants);
+            uint8_t *ants);
 TMR_Status TMR_SR_cmdGetAntennaPortPowers(TMR_Reader *reader, uint8_t *count,
             TMR_SR_PortPower *ports);
 TMR_Status TMR_SR_cmdGetAntennaPortPowersAndSettlingTime(TMR_Reader *reader,
@@ -1017,7 +986,7 @@ TMR_Status TMR_SR_cmdGetTemperature(TMR_Reader *reader, int8_t *temp);
 TMR_Status TMR_SR_cmdSetTxRxPorts(TMR_Reader *reader, uint8_t txPrt,
             uint8_t rxPort);
 TMR_Status TMR_SR_cmdSetAntennaSearchList(TMR_Reader *reader,
-            uint8_t count, const TMR_SR_PortPair *ports);
+            uint8_t count, const uint8_t *ports);
 
 #ifdef TMR_ENABLE_UHF
 TMR_Status TMR_SR_cmdSetAntennaPortPowers(TMR_Reader *reader,
@@ -1033,9 +1002,8 @@ TMR_Status TMR_SR_cmdSetProtocol(TMR_Reader *reader, TMR_TagProtocol protocol);
 #ifdef TMR_ENABLE_UHF
 TMR_Status TMR_SR_cmdSetFrequencyHopTable(TMR_Reader *reader, uint8_t count,
             const uint32_t *table);
-TMR_Status TMR_SR_cmdSetFrequencyHopTime(TMR_Reader *reader, uint32_t hopTime);
-TMR_Status TMR_SR_cmdSetQuantizationStep(TMR_Reader *reader, uint32_t step);
-TMR_Status TMR_SR_cmdSetMinimumFrequency(TMR_Reader *reader, uint32_t freq);
+TMR_Status
+TMR_SR_cmdSetFrequencyHopTableOption(TMR_Reader *reader, uint32_t value, uint8_t subOption);
 #endif /* TMR_ENABLE_UHF */
 TMR_Status TMR_SR_cmdSetGPIO(TMR_Reader *reader, uint8_t gpio, bool high);
 TMR_Status TMR_SR_cmdSetGPIODirection(TMR_Reader *reader, uint8_t pin,
@@ -1057,7 +1025,7 @@ TMR_Status TMR_SR_cmdSetUserMode(TMR_Reader *reader, TMR_SR_UserMode mode);
 TMR_Status TMR_SR_cmdSetReaderConfiguration(TMR_Reader *reader, 
             TMR_SR_Configuration key, const void *value);
 TMR_Status TMR_SR_cmdSetProtocolLicenseKey(TMR_Reader *reader, 
-            TMR_SR_SetProtocolLicenseOption option, uint8_t key[], int key_len,uint32_t *retData);
+            TMR_SR_SetProtocolLicenseOption option, uint8_t key[], int key_len);
 TMR_Status TMR_SR_cmdSetProtocolConfiguration(TMR_Reader *reader,
             TMR_TagProtocol protocol, TMR_SR_ProtocolConfiguration key,
             const void *value);
@@ -1097,7 +1065,6 @@ TMR_SR_msgSetupReadTagMultipleWithMetadata(TMR_Reader *reader, uint8_t *msg, uin
                                TMR_GEN2_Password accessPassword);
 
 #ifdef TMR_ENABLE_UHF
-TMR_Status TMR_SR_msgSetupReadTagSingle(uint8_t *msg, uint8_t *i, TMR_TagProtocol protocol,TMR_TRD_MetadataFlag metadataFlags, const TMR_TagFilter *filter,uint16_t timeout);
 void TMR_SR_msgAddGEN2WriteTagEPC(uint8_t *msg, uint8_t *i, uint16_t timeout, uint8_t *epc, uint8_t count);
 void TMR_SR_msgAddGEN2DataRead(uint8_t *msg, uint8_t *i, uint16_t timeout,
       TMR_GEN2_Bank bank, uint32_t wordAddress, uint8_t len, uint8_t option, bool withMetaData);
@@ -1312,13 +1279,14 @@ TMR_Status TMR_SR_cmdSetRegulatoryTest(struct TMR_Reader *reader, bool enable);
 #endif /* TMR_ENABLE_UHF */
 TMR_Status TMR_SR_addTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop,TMR_ReadPlan *rp, 
                              uint8_t *msg, uint8_t *i, uint32_t readTimeMs, uint8_t *lenbyte);
+void
+TMR_parseTagStats(TMR_Reader* reader, TMR_Reader_StatsValues* stats,
+                    uint8_t* msg, uint8_t offset);
 TMR_Status
-TMR_fillReaderStats(TMR_Reader *reader, TMR_Reader_StatsValues* stats, uint16_t flag, uint8_t* msg, uint8_t offset);
+TMR_fillReaderStats(TMR_Reader *reader, TMR_Reader_StatsValues* stats, uint16_t flag,
+                      uint8_t* msg, uint8_t offset);
 bool validateParams(TMR_ReadPlan *plan);
 bool compareAntennas(TMR_MultiReadPlan *multi);
-#ifdef TMR_ENABLE_UHF
-bool compareVersion(TMR_Reader *reader, uint8_t firstByte, uint8_t secondByte, uint8_t thirdByte, uint8_t fourthByte);
-#endif /* TMR_ENABLE_UHF */
 
 TMR_Status
 TMR_SR_cmdrebootReader(TMR_Reader *reader);
@@ -1327,12 +1295,10 @@ prepForSearch(TMR_Reader *reader, TMR_ReadPlan *rp);
 TMR_Status 
 TMR_SR_msgSetupMultipleProtocolSearch(TMR_Reader *reader, uint8_t *msg, TMR_SR_OpCode op, TMR_TagProtocolList *protocols, TMR_TRD_MetadataFlag metadataFlags, TMR_SR_SearchFlag antennas, TMR_TagFilter **filter, uint16_t timeout);
 TMR_Status TMR_SR_cmdProbeBaudRate(TMR_Reader *reader, uint32_t *currentBaudRate);
+TMR_Status TMR_SR_getVersion(TMR_Reader* reader);
 void TMR_SR_updateBaseTimeStamp(TMR_Reader *reader);
-TMR_Status verifySearchStatus(TMR_Reader *reader);
+TMR_Status TMR_stopStreaming(TMR_Reader *reader);
 #ifdef TMR_ENABLE_UHF
-bool isM6eFamily(TMR_SR_SerialReader *sr);
-bool isNotM6eFamily(TMR_SR_SerialReader *sr);
-
 #ifdef TMR_ENABLE_BACKGROUND_READS
 void notify_authreq_listeners(TMR_Reader *reader, TMR_TagReadData *trd, TMR_TagAuthentication *auth);
 #endif
@@ -1344,11 +1310,11 @@ TMR_SR_cmdSetProtocolList(TMR_Reader *reader, TMR_TagProtocolList *protocols);
 TMR_Status
 TMR_SR_cmdGetProtocolList(TMR_Reader *reader, TMR_TagProtocolList *protocols);
 TMR_Status
-TMR_SR_cmdWriteMemory(TMR_Reader *reader, TMR_Memory_Type memType, uint32_t address,
-                        uint16_t dataLength, const uint8_t *data, const TMR_TagFilter *filter);
+TMR_SR_cmdWriteMemory(TMR_Reader *reader, TMR_ExtTagOp *tagOp, 
+                        const TMR_TagFilter *filter, TMR_uint8List tagOpExtParams, TMR_uint8List* data);
 TMR_Status
-TMR_SR_cmdReadMemory(TMR_Reader *reader, TMR_Memory_Type memType, uint32_t address, uint8_t len,
-                       const TMR_TagFilter *filter, TMR_uint8List *data);
+TMR_SR_cmdReadMemory(TMR_Reader *reader, TMR_ExtTagOp *tagOp, const TMR_TagFilter *filter,
+                       TMR_uint8List *data, TMR_uint8List tagOpExtParams);
 void
 TMR_SR_msgAddReadMemory(uint8_t *msg, uint8_t *i, uint16_t timeout, TMR_Memory_Type memType,
                           uint32_t address, uint8_t len, bool withMetaData);
@@ -1358,7 +1324,16 @@ TMR_SR_msgAddWriteMemory(uint8_t *msg, uint8_t *i, uint16_t timeout, TMR_Memory_
 TMR_Status
 TMR_SR_cmdPassThrough(TMR_Reader *reader, uint32_t timeout, uint32_t configFlags,
                                    uint16_t cmdLen, const uint8_t *cmd , TMR_uint8List *data);
+#if TMR_ENABLE_EXTENDED_TAGOPS
+TMR_Status
+TMR_SR_msgAddExtendedParams(uint8_t *msg, uint8_t *i, uint8_t *optbyte, const TMR_uint8List *extParams);
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+void
+TMR_SR_msgAddAccessPassword(uint8_t* msg,  uint8_t* i, uint8_t* optbyte, 
+                              const TMR_uint8List *accessPassword);
 #endif /* TMR_ENABLE_HF_LF */
+
+TMR_Status TMR_stopStreaming(TMR_Reader* reader);
 #ifdef __cplusplus
 }
 #endif

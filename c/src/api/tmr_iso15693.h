@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2020 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -47,6 +47,9 @@ typedef enum TMR_ISO15693_TagType
   TMR_ISO15693_TAGTYPE_ICODE_SLIX_L            = 0x00004000,
   TMR_ISO15693_TAGTYPE_ICODE_SLIX_S            = 0x00008000,
   TMR_ISO15693_TAGTYPE_ICODE_SLIX_2            = 0x00010000,
+  TMR_ISO15693_TAGTYPE_VIGO                    = 0x00020000,
+  TMR_ISO15693_TAGTYPE_TAGIT                   = 0x00040000,
+  TMR_ISO15693_TAGTYPE_PICOPASS                = 0x00080000,
 }TMR_ISO15693_TagType;
 
 #endif /* TMR_ENABLE_HF_LF */

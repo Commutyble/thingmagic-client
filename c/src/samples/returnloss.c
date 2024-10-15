@@ -1,7 +1,6 @@
 /**
- * Sample program that power cycles the reader
- * and connects back once the reader is power cycled successfully.
- * @file rebootReader.c
+ * Sample program that gives antenna return loss value.
+ * @file returnloss.c
  */
 
 #include <tm_reader.h>

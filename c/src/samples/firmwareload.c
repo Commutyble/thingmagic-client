@@ -1,7 +1,8 @@
 /**
  * Sample program to load firmware
+ * @file firmwareload.c
  */
-
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,7 +114,30 @@ int main(int argc, char *argv[])
        "flash ROM does not have the correct address value. Proceeding to load firmware, anyway.\n");
     break;
   case TMR_ERROR_TIMEOUT:
-    fprintf(stderr, "Error: Connection to reader failed. Proceeding to load firmware, anyway.\n");
+    {
+      uint32_t currentBaudRate;
+
+      /* Start probing mechanism. */
+      ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+      checkerr(rp, ret, 1, "Probe the baudrate");
+
+      /* Set the current baudrate, so that 
+       * next TMR_Connect() call can use this baudrate to connect.
+       */
+      ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+      checkerr(rp, ret, 1, "Setting baudrate"); 
+
+      /* Connect using current baudrate */
+      ret = TMR_connect(rp);
+      if(TMR_ERROR_TIMEOUT == ret)
+      {
+        fprintf(stderr, "Error: Connection to reader failed. Proceeding to load firmware, anyway.\n");
+      }
+      else
+      {
+        checkerr(rp, ret, 1, "Connecting reader");
+      }
+    }
     break;
   case TMR_ERROR_TM_ASSERT_FAILED:
     fprintf(stderr, "Error: Assert failed. Proceeding to load firmware, anyway.\n");
@@ -134,7 +158,16 @@ int main(int argc, char *argv[])
   
   printf("Loading firmware\n");
   ret = TMR_firmwareLoad(rp, f, TMR_fileProvider);
-  checkerr(rp, ret, 1, "loading firmware");
+
+  if (ret == TMR_ERROR_TIMEOUT)
+  {
+    fprintf(stderr, "Error: The firmware loading might have been corrupted. Please try loading it again.\n");
+    exit(1);
+  }
+  else
+  {
+    checkerr(rp, ret, 1, "loading firmware");
+  }
 
   {
     TMR_String value;

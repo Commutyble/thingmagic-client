@@ -10,14 +10,11 @@
 #include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
-
+#include <tmr_utils.h>
 #ifndef WIN32
 #include <unistd.h>
 #endif
 
-#ifdef TMR_ENABLE_HF_LF
-#include <tmr_utils.h>
-#endif /* TMR_ENABLE_HF_LF */
 
 /* Enable this to use transportListener */
 #ifndef USE_TRANSPORT_LISTENER
@@ -30,9 +27,8 @@
                          "[--config option] : Indicates configuration options of the reader                                  \n"\
                          "                    option: 1 - saveAndRead,                                                       \n"\
                          "                            2 - save,                                                              \n"\
-                         "                            3 - stream,                                                            \n"\
-                         "                            4 - verify,                                                            \n"\
-                         "                            5 - clear,                                                             \n"\
+                         "                            3 - stream,                                                           \n"\
+                         "                            4 - clear,                                                             \n"\
                          "                    e.g., --config 1 for saving and enabling autonomous read.                      \n"\
                          "[--trigger pinNum]: e.g., --trigger 0 for auto read on boot,                                       \n"\
                          "                          --trigger 1 for read on gpi pin 1.                                       \n"\
@@ -56,7 +52,7 @@ void errx(int exitval, const char *fmt, ...)
 
 void checkerr(TMR_Reader* rp, TMR_Status ret, int exitval, const char *msg)
 {
-  if (TMR_SUCCESS != ret)
+  if ((TMR_SUCCESS != ret) && (TMR_SUCCESS_STREAMING != ret))
   {
     errx(exitval, "Error %s: %s\n", msg, TMR_strerr(rp, ret));
   }
@@ -111,7 +107,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -129,18 +129,22 @@ const char* protocolName(TMR_TagProtocol protocol)
   {
     case TMR_TAG_PROTOCOL_NONE:
       return "NONE";
-    case TMR_TAG_PROTOCOL_ISO180006B:
-      return "ISO180006B";
     case TMR_TAG_PROTOCOL_GEN2:
       return "GEN2";
+#ifdef TMR_ENABLE_ISO180006B
+    case TMR_TAG_PROTOCOL_ISO180006B:
+      return "ISO180006B";
     case TMR_TAG_PROTOCOL_ISO180006B_UCODE:
       return "ISO180006B_UCODE";
+#endif /* TMR_ENABLE_ISO180006B */
+#ifndef TMR_ENABLE_GEN2_ONLY
     case TMR_TAG_PROTOCOL_IPX64:
       return "IPX64";
     case TMR_TAG_PROTOCOL_IPX256:
       return "IPX256";
     case TMR_TAG_PROTOCOL_ATA:
       return "ATA";
+#endif /* TMR_ENABLE_GEN2_ONLY */
   case TMR_TAG_PROTOCOL_ISO14443A:
     return "ISO14443A";
   case TMR_TAG_PROTOCOL_ISO15693:
@@ -157,7 +161,7 @@ extern bool isMultiSelectEnabled;
 extern bool isStreamEnabled;
 
 //Global Variables.
-char configOption[16]  = {0};  // To store the config options i.e. a)saveAndRead, b)save, c)stream, d)verify, e)clear,
+char configOption[16]  = {0};  // To store the config options i.e. a)saveAndRead, b)save, c)stream, d)clear,
 char autoReadType[16]  = {0};  // To store the Autonomous read type i.e. ReadOnBoot or ReadOnGPI.
 uint8_t triggerTypeNum =   0;  // To store the tgigger value i.e. 0 to 4.
 uint8_t modelID        =   0;  // To store module type i.e 1: UHF , 2: M3e.
@@ -242,12 +246,8 @@ int main(int argc, char *argv[])
         case 3:
           strcpy(configOption,"stream");
           break;
-        //Verifies the current config as per saved one.
-        case 4:
-          strcpy(configOption,"verify");
-          break;
         //Clears the configuration.
-        case 5:
+        case 4:
           strcpy(configOption,"clear");
           break;
         default:
@@ -378,22 +378,49 @@ int main(int argc, char *argv[])
   }
 
   ret = TMR_connect(rp);
-  checkerr(rp, ret, 1, "connecting reader");
+  if ((TMR_READER_TYPE_SERIAL == rp->readerType) && (TMR_SUCCESS != ret))
+  {     
+      /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+       * The connection may fail if the module is configured to a different baud rate. If
+       * that is the case, the MercuryAPI tries connecting to the module with other supported
+       * baud rates until the connection is successful using baud rate probing mechanism.
+       */
+      if (TMR_ERROR_TIMEOUT == ret)
+      {
+          uint32_t currentBaudRate;
+
+          /* Start probing mechanism. */
+          ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+          checkerr(rp, ret, 1, "Probe the baudrate");
+
+          /* Set the current baudrate, so that
+           * next TMR_Connect() call can use this baudrate to connect.
+           */
+          TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+      }
+
+      /* When the module is streaming the tags,
+       * TMR_connect() returns with TMR_SUCCESS_STREAMING status, which should be handled in the codelet.
+       * User can either continue to parse streaming responses or stop the streaming.
+       * Use 'stream' option demonstrated in the AutonomousMode.c codelet to
+       * continue streaming. To stop the streaming, use TMR_stopStreaming() as demonstrated below.
+       */
+      if (TMR_SUCCESS_STREAMING == ret)
+      {
+          ret = TMR_stopStreaming(rp);
+          checkerr(rp, ret, 1, "Stoping the read");
+      }
+
+      if (TMR_SUCCESS == ret)
+      {
+          ret = TMR_connect(rp);
+      }     
+  }
+  checkerr(rp, ret, 1, "Connecting reader");
 
   TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
   checkerr(rp, ret, 1, "Getting version model");
-  if (0 == strcmp("M3e", model.value))
-  {
-    if (antennaList != NULL)
-    {
-      printf("Module doesn't support antenna input\n");
-      usage();
-    }
-  }
-  if ((0 == strcmp("M6e", model.value)) || (0 == strcmp("M6e PRC", model.value))
-      || (0 == strcmp("M6e Micro", model.value)) || (0 == strcmp("M6e Nano", model.value))
-      || (0 == strcmp("M6e Micro USB", model.value)) || (0 == strcmp("M6e Micro USBPro", model.value))
-      || (0 == strcmp("M6e JIC", model.value)) || (0 == strcmp("M3e", model.value)))
+
   {
     // initialize the read plan
     if (0 == strcmp("M3e", model.value))
@@ -508,16 +535,6 @@ int main(int argc, char *argv[])
       checkerr(rp, ret, 1, "setting user configuration: save read plan configuration");
       printf("User config set option:save with read plan configuration\n");
     }
-    else if(0x00 == strcmp("verify", configOption))
-    {
-      //Init UserConfigOp structure to verify all saved configuration parameters
-      TMR_init_UserConfigOp(&config, TMR_USERCONFIG_VERIFY);
-      checkerr(rp, ret, 1, "Initializing user configuration: verify all saved configuration");
-
-      ret = TMR_paramSet(rp, TMR_PARAM_USER_CONFIG, &config);
-      checkerr(rp, ret, 1, "setting configuration: verify all saved configuration params");
-      printf("User config set option:verify all configuration\n");
-    }
     else if(0x00 == strcmp("clear", configOption))
     {
       //Init UserConfigOp structure to reset/clear all configuration parameter
@@ -533,10 +550,6 @@ int main(int argc, char *argv[])
       printf("Please input correct config option\n");
       usage();
     }
-  }
-  else
-  {
-    printf("Error: This codelet works only on M6e variants.\n");
   }
 
   TMR_destroy(rp);
@@ -566,33 +579,29 @@ void
 callback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
 {
   char epcStr[128];
-  TMR_Status ret = TMR_SUCCESS;
 
   TMR_bytesToHex(t->tag.epc, t->tag.epcByteCount, epcStr);
   printf("%s %s ant: %d readcount: %d\n", protocolName(t->tag.protocol), epcStr, t->antenna, t->readCount);
 
   if (0 < t->data.len)
   {
-#ifdef TMR_ENABLE_HF_LF
     if (0x8000 == t->data.len)
     {
+      TMR_Status ret = TMR_SUCCESS;
+
       ret = TMR_translateErrorCode(GETU16AT(t->data.list, 0));
       checkerr(reader, ret, 0, "Embedded tagOp failed:");
     }
     else
-#endif /* TMR_ENABLE_HF_LF */
     {
       char dataStr[255];
-      uint32_t dataLen = t->data.len;
+      uint32_t dataLen;
 
-      //Convert data len from bits to byte(For M3e only).
-      if(modelID == 2)
-      {
-        dataLen = tm_u8s_per_bits(t->data.len);
-      }
+      //Convert data len from bits to byte.
+      dataLen = tm_u8s_per_bits(t->data.len);
 
       TMR_bytesToHex(t->data.list, dataLen, dataStr);
-      printf("  data(%d): %s\n", t->data.len, dataStr);
+      printf("  data(%d): %s\n", dataLen, dataStr);
     }
   }
 }
@@ -663,39 +672,43 @@ void configureUHFPersistentSettings(TMR_Reader *rp, TMR_String *model, uint8_t *
 #endif
   }
 
+#ifdef TMR_ENABLE_UHF
   //Gen2 setting
   {
     TMR_GEN2_LinkFrequency linkFreq = TMR_GEN2_LINKFREQUENCY_250KHZ;
     TMR_GEN2_Tari tari              =  TMR_GEN2_TARI_25US;
     TMR_GEN2_Target target          = TMR_GEN2_TARGET_A;
-    TMR_GEN2_TagEncoding encoding   = TMR_GEN2_MILLER_M_2;
+    TMR_GEN2_TagEncoding encoding   = TMR_GEN2_MILLER_M_4;
     TMR_GEN2_Session session        = TMR_GEN2_SESSION_S0;
     TMR_GEN2_Q q;
     q.type                          = TMR_SR_GEN2_Q_DYNAMIC;
 
-    //Link frequency: 250KHZ
-    linkFreq = TMR_GEN2_LINKFREQUENCY_250KHZ;
-    ret = TMR_paramSet(rp, TMR_PARAM_GEN2_BLF, &linkFreq);
+    if(rp->u.serialReader.versionInfo.hardware[0] != TMR_SR_MODEL_M7E)
+    {
+      //Link frequency: 250KHZ
+      linkFreq = TMR_GEN2_LINKFREQUENCY_250KHZ;
+      ret = TMR_paramSet(rp, TMR_PARAM_GEN2_BLF, &linkFreq);
 #ifndef BARE_METAL
-    checkerr(rp, ret, 1, "setting blf");
+      checkerr(rp, ret, 1, "setting blf");
 #endif
 
-    //Tari: 25US
-    ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TARI, &tari);
+      //Tari: 25US
+      ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TARI, &tari);
 #ifndef BARE_METAL
-    checkerr(rp, ret, 1, "setting tari");
+      checkerr(rp, ret, 1, "setting tari");
 #endif
+
+      //Encoding: M4
+      ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TAGENCODING, &encoding);
+#ifndef BARE_METAL
+      checkerr(rp, ret, 1, "setting tag encoding");
+#endif
+    }
 
     //Target: A
     ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TARGET, &target);
 #ifndef BARE_METAL
     checkerr(rp, ret, 1, "setting target");
-#endif
-
-    //Encoding: M2
-    ret = TMR_paramSet(rp, TMR_PARAM_GEN2_TAGENCODING, &encoding);
-#ifndef BARE_METAL
-    checkerr(rp, ret, 1, "setting tag encoding");
 #endif
 
     //Session: S0
@@ -710,6 +723,7 @@ void configureUHFPersistentSettings(TMR_Reader *rp, TMR_String *model, uint8_t *
     checkerr(rp, ret, 1, "setting q");
 #endif
   }
+#endif /* TMR_ENABLE_UHF */
 
   //RF Power settings
   {
@@ -729,6 +743,7 @@ void configureUHFPersistentSettings(TMR_Reader *rp, TMR_String *model, uint8_t *
 #endif
   }
 
+#ifdef TMR_ENABLE_UHF
   // Hop Table
   {
     TMR_uint32List hopTable;
@@ -777,14 +792,14 @@ void configureUHFPersistentSettings(TMR_Reader *rp, TMR_String *model, uint8_t *
     if(TMR_REGION_OPEN == region)
     {
       bool dwellTimeEnable = true;
-      uint32_t quantStep    = 25000;
+      uint32_t quantStep    = 100000;
       uint32_t dwellTime    = 250;
-      uint32_t minFreq      = 859000;
+      uint32_t minFreq      = 865700;
 
       //Set dwell time enable before stting dwell time
       ret = TMR_paramSet(rp, TMR_PARAM_REGION_DWELL_TIME_ENABLE, &dwellTimeEnable);
 #ifndef BARE_METAL
-      checkerr(rp, ret, 1, "setting dwell time");
+      checkerr(rp, ret, 1, "setting dwell time enable");
 #endif
 
       //set quantization step
@@ -802,11 +817,11 @@ void configureUHFPersistentSettings(TMR_Reader *rp, TMR_String *model, uint8_t *
       //set minimum frequency
       ret = TMR_paramSet(rp, TMR_PARAM_REGION_MINIMUM_FREQUENCY, &minFreq);
 #ifndef BARE_METAL
-     checkerr(rp, ret, 1, "setting dwell time");
+     checkerr(rp, ret, 1, "setting minimum frequency");
 #endif
     }
   }
-
+#endif /* TMR_ENABLE_UHF */
   // Filter
   /* (Optional) Tag Filter
    * Not required to read TID, but useful for limiting target tags */
@@ -1015,13 +1030,18 @@ TMR_Status serial_connect(TMR_Reader *reader)
       ret = TMR_SR_receiveMessage(reader, msg, TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE, 5000);
       if (TMR_SUCCESS == ret)
       {
+#ifdef TMR_ENABLE_UHF
         if(msg[5] == 0x88)
         {
           isMultiSelectEnabled = true;
         }
-
+#endif /* TMR_ENABLE_UHF */
         reader->connected = true;
         break;
+      }
+      else
+      {
+        printf("Failed to connect with %d baudRate\n", probeBaudRates[i]);
       }
     }
   }while(TMR_SUCCESS != ret);
@@ -1034,7 +1054,6 @@ streamCallback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
 {
   char epcStr[128];
   uint8_t antennaID = 0;
-  TMR_Status ret = TMR_SUCCESS;
 
   //Retrieve Antenna ID.
   antennaID = getAntennaId(t->antenna);
@@ -1044,26 +1063,22 @@ streamCallback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
 
   if (0 < t->data.len)
   {
-#ifdef TMR_ENABLE_HF_LF
     if (0x8000 == t->data.len)
     {
+      TMR_Status ret = TMR_SUCCESS;
       ret = TMR_translateErrorCode(GETU16AT(t->data.list, 0));
       checkerr(reader, ret, 0, "Embedded tagOp failed:");
     }
     else
-#endif /* TMR_ENABLE_HF_LF */
     {
       char dataStr[255];
-      uint32_t dataLen = t->data.len;
+      uint32_t dataLen;
 
-      //Convert data len from bits to byte(For M3e only).
-      if(modelID == 2)
-      {
-        dataLen = tm_u8s_per_bits(t->data.len);
-      }
+      //Convert data len from bits to byte.
+      dataLen = tm_u8s_per_bits(t->data.len);
 
       TMR_bytesToHex(t->data.list, dataLen, dataStr);
-      printf("  data(%d): %s\n", t->data.len, dataStr);
+      printf("  data(%d): %s\n", dataLen, dataStr);
     }
   }
 }

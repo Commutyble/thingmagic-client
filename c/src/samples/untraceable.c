@@ -9,6 +9,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
+#include <tmr_utils.h>
 
 #if WIN32
 #define snprintf sprintf_s
@@ -91,7 +92,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
 	while(NULL != token)
 	{
+#ifdef WIN32
+		scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
 		scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
 		if (1 != scans)
 		{
 			fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -184,9 +189,19 @@ void ReadTags(TMR_Reader* rp)
         printf("EPC:%s ant:%d count:%d Time:%s\n", epcStr, trd.antenna, trd.readCount, timeStr);
         if(0 < trd.data.len)
         {
-          char dataStr[255];
-          TMR_bytesToHex(trd.data.list, trd.data.len, dataStr);
-          printf("Raw data(%d): %s\n", trd.data.len, dataStr);
+          if (0x8000 == trd.data.len)
+          {
+            ret = TMR_translateErrorCode(GETU16AT(trd.data.list, 0));
+            checkerr(rp, ret, 0, "Embedded tagOp failed:");
+          }
+          else
+          {
+            char dataStr[255];
+            uint8_t dataLen = (trd.data.len / 8);
+
+            TMR_bytesToHex(trd.data.list, dataLen, dataStr);
+            printf("Raw data(%d): %s\n", dataLen, dataStr);
+          }
         }
 	}
 }
@@ -310,25 +325,6 @@ int main(int argc, char *argv[])
 		checkerr(rp, ret, 1, "setting region");  
 	}
 #ifdef TMR_ENABLE_UHF
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-    {
-      ret = isAntDetectEnabled(rp, antennaList);
-      if(TMR_ERROR_UNSUPPORTED == ret)
-      {
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-      }
-      else
-      {
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-      }
-    }
-
 	/**
 	* for antenna configuration we need two parameters
 	* 1. antennaCount : specifies the no of antennas should

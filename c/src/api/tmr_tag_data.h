@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -116,9 +116,7 @@ typedef enum TMR_TRD_MetadataFlag
   TMR_TRD_METADATA_FLAG_GEN2_LF   = 0x0400,
   TMR_TRD_METADATA_FLAG_GEN2_TARGET = 0x0800,
   TMR_TRD_METADATA_FLAG_BRAND_IDENTIFIER = 0x1000,
-#ifdef TMR_ENABLE_HF_LF
   TMR_TRD_METADATA_FLAG_TAGTYPE   = 0x2000,
-#endif /* TMR_ENABLE_HF_LF */
   TMR_TRD_METADATA_FLAG_MAX = 0x2000,
   /* ALL */
   TMR_TRD_METADATA_FLAG_ALL       =    (
@@ -198,6 +196,15 @@ typedef struct TMR_TagReadData
   TMR_uint8List userMemData;
   /** Read RESERVED bank data bytes */
   TMR_uint8List reservedMemData;
+  /** EPC bank data error */
+  int8_t epcMemError;
+  /** TID bank data error */
+  int8_t tidMemError;
+  /** USER bank data error */
+  int8_t userMemError;
+  /** RESERVED bank data error */
+  int8_t reservedMemError;
+
   /** [PRIVATE] Relative time of the read within the read interval, in microseconds (for internal use only,
    * this value is used to calculate timestampLow and timestampHigh)
    **/

@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <SchemaVersion>2.0</SchemaVersion>	  
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNameSpace>ThingMagic.ReaderLinux</RootNameSpace>
+    <TargetFramework>netstandard2.0</TargetFramework>	  
+    <DefineConstants>$(DefineConstants);TMR_ENABLE_SERIAL_READER_ONLY</DefineConstants>
+    <OutputType>Library</OutputType>
+    <OutputPath>../</OutputPath>
+  <dependentAssembly>
+    <assemblyIdentity name="System.IO.Ports" publicKeyToken="cc7b13ffcd2ddd51" culture="neutral" />
+  </dependentAssembly>
+  <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>MercuryAPI</AssemblyName>
+    <AssemblyOriginatorKeyFile>../ThingMagic.Reader/mercuryapi.snk</AssemblyOriginatorKeyFile>
+    <SignAssembly>True</SignAssembly>
+  </PropertyGroup>
+  <ItemGroup>
+          <None Include="mercuryapi.snk" />
+	  <Compile Include="../ThingMagic.Reader/*.cs" />
+	  <Compile Update="Properties/AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="6.0.0.0" IsImplicitlyDefined="true" />
+  </ItemGroup>
+  <PropertyGroup>
+	  <PostBuildEvent>cp "../netstandard2.0/MercuryAPI.dll" "../Linux/MercuryAPI.dll"; rm "-rf" "../netstandard2.0/"</PostBuildEvent>
+  </PropertyGroup>
+</Project>

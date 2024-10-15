@@ -1,0 +1,161 @@
+﻿<UserControl x:Class="ThingMagic.URA2.UserMemory"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ThingMagic.URA2" 
+             mc:Ignorable="d" 
+             d:DesignHeight="630" d:DesignWidth="800">
+    <StackPanel Orientation="Vertical" Margin="10" Name="spUserMemory" IsEnabled="False" HorizontalAlignment="Left">
+        <StackPanel.Resources>
+            <BooleanToVisibilityConverter x:Key="boolToVisible"/>
+        </StackPanel.Resources>
+        <Label Name="lblUHFNote" Margin="5" Content=" Note : User Memory Operation supports only GEN2 Tags. Rest of the protocols will be ignored"></Label>
+        <GroupBox  Name="tagUserMemory"  Background="White">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold">Tag to Read/Write</TextBlock>
+            </GroupBox.Header>
+            <StackPanel Name="grid1" Margin="5">
+                <!--<StackPanel Orientation="Horizontal" Name="stkSelectProtocol">
+                    <Label Margin="3" Content="Select Protocol : " />
+                    <RadioButton Margin="3" VerticalAlignment="Center" Name="rbt14443A" Content="HF14443A" Visibility="Collapsed" />
+                    <RadioButton Margin="3" VerticalAlignment="Center" Name="rbt15693" Content="HF15693" Visibility="Collapsed"/>
+                    --><!--<RadioButton Margin="3" VerticalAlignment="Center" Name="rbtngen2" Content="GEN2" Checked="rbtngen2_Checked"/>--><!--
+                </StackPanel>-->
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Vertical">
+                        <RadioButton Checked="rbFirstTagUserMemTb_Checked" Content="First tag to respond " GroupName="UsermemTab" IsChecked="True" Margin="3" Name="rbFirstTagUserMemTb" />
+                        <RadioButton ToolTipService.ShowOnDisabled="True" ToolTip="Go to Tag Results tab and right-click on a data cell" Content="Tag selected in Tag Results page" GroupName="UsermemTab" Margin="3" Name="rbSelectedTagUserMemTb" IsEnabled="False"/>
+                    </StackPanel>
+                    <Button Content="Read" Margin="30,3,3,3" Name="btnRead" VerticalAlignment="Top" Width="75" Click="btnRead_Click" />
+                </StackPanel>
+                <Grid Name="gdTagSelectionCriteria" Visibility="{Binding ElementName=rbSelectedTag, Path=IsChecked, Converter={StaticResource boolToVisible}}" HorizontalAlignment="Left" Width="910">
+                    <StackPanel Orientation="Vertical" Margin="3">
+                        <Label Margin="3"  Name="lblSelectFilter" Content="" />
+                        <Label Margin="3" Content="Error" Name="lblUserMemoryError" Visibility="Collapsed" Foreground="#FFF60909" OpacityMask="#FFFA0000" />
+                    </StackPanel>
+                    <TextBox Height="23" Margin="0,21,71,0" Name="txtEpc" VerticalAlignment="Top" Visibility="Collapsed" HorizontalAlignment="Right" Width="28" />
+                    <TextBox Height="23" HorizontalAlignment="Left" Margin="647,21,0,0" Name="txtData" VerticalAlignment="Top" Visibility="Collapsed" Width="28" />
+                </Grid>
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Name="gbUMRep" Background="White">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold"> Data format </TextBlock>
+            </GroupBox.Header>
+            <StackPanel Margin="5" Name="gbRepresent" Orientation="Vertical">
+                <RadioButton HorizontalAlignment="Left" VerticalAlignment="Top" Name="rbHexRep" GroupName="RepresentUserMem" IsChecked="True" Content="Hexadecimal" Margin="3" Checked="rbHexRep_Checked"/>
+                <RadioButton Name="rbASCII" HorizontalAlignment="Left" VerticalAlignment="Top" GroupName="RepresentUserMem" IsChecked="False" Content="ASCII Notepad" Margin="3" Checked="rbASCII_Checked" />
+            </StackPanel>
+        </GroupBox>
+        <StackPanel Orientation="Vertical" Name="stkM3eUserMemory">
+            <StackPanel.Resources>
+                <Style TargetType="{x:Type StackPanel}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=rbt14443A, Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding ElementName=rbt15693, Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Resources>
+            <GroupBox Name="gbM3eDataEditorHex" Background="White" Visibility="{Binding IsChecked,ElementName=rbHexRep,Converter={StaticResource boolToVisible} }">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Data Editor (Hex)</TextBlock>
+                </GroupBox.Header>
+            
+            <Grid Margin="5">
+                <Button Name="btnM3eWriteHex" IsEnabled="False" Content="Write To Tag" Margin="15,3,3,3" Width="100" HorizontalAlignment="Left" Height="25" VerticalAlignment="Top" Click="btnWrite_Click"></Button>
+                <Grid Name="grdM3eDataEditorHex" Margin="15,35,0,94" >
+                    <StackPanel Margin="10,1,0,0" Name="stkpnlM3eByteAddressHex" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Horizontal"></StackPanel>
+                    <ScrollViewer Name="sclvwrBlockAddressEditHex" Height="Auto" Width="Auto" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" HorizontalAlignment="Left" Margin="0,34,0,-34">
+                        <StackPanel Name="stkpnlBlockAddressHex" Height="Auto" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Vertical">
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+            </GroupBox>
+            <GroupBox Name="gbM3eDataEditorASCII" Background="White" Visibility="{Binding IsChecked, ElementName=rbASCII, Converter={StaticResource boolToVisible}}">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Data Editor (ASCII)</TextBlock>
+                </GroupBox.Header>
+                <Grid Margin="5" Visibility="{Binding IsChecked,ElementName=rbASCII,Converter={StaticResource boolToVisible} }">
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel>
+                            <Button Name="btnM3eWriteASCII" IsEnabled="False" Content="Write To Tag" Margin="15,3,3,3" Width="100" HorizontalAlignment="Left" Height="25" VerticalAlignment="Top" Click="btnWrite_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="470,10,0,0">
+                            <TextBlock Foreground="Red" Name="txtblkCharLabel" HorizontalAlignment="Left" VerticalAlignment="Top" Text=""/>
+                            <TextBlock Foreground="Red" Name="txtblkTotalCount" HorizontalAlignment="Left" VerticalAlignment="Top" Text="00" Visibility="Collapsed"/>
+                            <TextBlock Foreground="Red" Name="txtblkCharAvailableLabel" HorizontalAlignment="Left" VerticalAlignment="Top" Text="" Visibility="Collapsed"/>
+                            <TextBlock Foreground="Red" Name="txtblkCharAvailable" HorizontalAlignment="Left" VerticalAlignment="Top" Text="00 characters remaining"/>
+                        </StackPanel>
+                        
+                    </StackPanel>
+                    <Grid Margin="0,6,0,94">
+                    <TextBox IsEnabled="False" CaretBrush="Black" FontFamily="Consolas" Background="#0A000000" Cursor="Arrow" Height="250"  HorizontalAlignment="Left" Margin="15,32,0,0"  Width="720"  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="0" AcceptsReturn="True" AcceptsTab="True" IsUndoEnabled="False" Name="txtM3eDataASCII" PreviewKeyDown="txtM3eDataASCII_PreviewKeyDown" PreviewTextInput="txtM3eDataASCII_PreviewTextInput" TextChanged="txtM3eDataASCII_TextChanged">
+                        </TextBox>
+                    </Grid>
+                </Grid>
+            </GroupBox>
+        </StackPanel>
+        <StackPanel Orientation="Vertical" Name="stkGen2UserMemory">
+            <StackPanel.Resources>
+                <Style TargetType="{x:Type StackPanel}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ElementName=rbtngen2, Path=IsChecked}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Resources>
+            <GroupBox Height="Auto" Background="White" Name="gbHexRep" Visibility="{Binding IsChecked,ElementName=rbHexRep,Converter={StaticResource boolToVisible} }" >
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">Addressed Hex Editor</TextBlock>
+                </GroupBox.Header>
+                <Grid Margin="5">
+                    <Button Name="btnWrite" IsEnabled="False" Content="Write To Tag" Margin="15,3,3,3" Width="100" HorizontalAlignment="Left" Height="25" VerticalAlignment="Top" Click="btnWrite_Click"></Button>
+                    <TextBlock TextWrapping="WrapWithOverflow" TextAlignment="Left" Text="Byte Address (Hex)" Height="30" Width="68" Margin="20,40,0,0" VerticalAlignment="Top" FontWeight="Bold" HorizontalAlignment="Left" FontSize="10" />
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,35,0,0" HorizontalAlignment="Right" Width="278">
+                            <TextBlock Foreground="Red" Name="txtblkHexByteSp64BytesAvailable" HorizontalAlignment="Left" VerticalAlignment="Top" Text="Space for "></TextBlock>
+                            <TextBlock Foreground="Red" Name="txtblkSpMAXSizeHexByteSp64BytesAvailable" HorizontalAlignment="Left" VerticalAlignment="Top" Text="00"></TextBlock>
+                            <TextBlock Foreground="Red" Name="txtblkSpHexByteSp64Bytes_End" HorizontalAlignment="Left" VerticalAlignment="Top" Text=" bytes available"></TextBlock>
+                        </StackPanel>
+                        <Grid Name="grdpnlByteAddress" Height="215" HorizontalAlignment="Left" Margin="20,60,0,95" Width="1030">
+                            <StackPanel Margin="10,10,0,0" Name="stkpnlHexClmnAddress" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Horizontal" Height="Auto" ></StackPanel>
+                            <ScrollViewer Name="hexAddressEdtrScrollViewer" Height="Auto" Width="1025" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" HorizontalAlignment="Left" Margin="0,34,0,-34">
+                                <StackPanel  Name="stkpnlByteAddress" VerticalAlignment="Top" HorizontalAlignment="Left" Orientation="Vertical" Height="Auto">
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                    <Label Name="lblErrorAddHexEdtr" Content="" Foreground="Red" Height="30" Width="Auto" Margin="98,324,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" />
+                </Grid>
+            </GroupBox>
+            <GroupBox Background="White" Name="gbAsciiRep" Visibility="{Binding IsChecked, ElementName=rbASCII, Converter={StaticResource boolToVisible}}">
+                <GroupBox.Header>
+                    <TextBlock FontWeight="Bold">ASCII Text Editor</TextBlock>
+                </GroupBox.Header>
+                <Grid Height="auto">
+                    <Button Name="btnWriteAscii" IsEnabled="False" Content="Write To Tag" Margin="15,0,0,0" Width="100" HorizontalAlignment="Left" Height="26" VerticalAlignment="Top" Click="btnWrite_Click" ></Button>
+                    <StackPanel Orientation="Horizontal" Margin="590,40,0,0" >
+                        <TextBlock Foreground="Red" Name="txtblkSp64CharsAvailable" HorizontalAlignment="Left" VerticalAlignment="Top" Text="Space for "></TextBlock>
+                        <TextBlock Foreground="Red" Name="txtblkSpMAXSizeCharsAvailable" HorizontalAlignment="Left" VerticalAlignment="Top" Text="00"></TextBlock>
+                        <TextBlock Foreground="Red" Name="txtblkSp64CharsAvailable_End" HorizontalAlignment="Left" VerticalAlignment="Top" Text=" characters available: "></TextBlock>
+                        <TextBlock Name="txtblkRemainingCharsAvailableCount" Foreground="Red" Text="00 characters remaining" HorizontalAlignment="Left" VerticalAlignment="Top" ></TextBlock>
+                    </StackPanel>
+                    <TextBox IsEnabled="False" PreviewKeyDown="txtASCIIData_PreviewKeyDown" PreviewTextInput="txtASCIIData_PreviewTextInput" CaretBrush="Black" FontFamily="Consolas" Background="#0A000000" Cursor="Arrow" Height="250"  HorizontalAlignment="Left" Name="txtASCIIData" Margin="15,32,0,0"  Width="900"  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxLength="0" TextChanged="txtASCIIData_TextChanged" AcceptsReturn="True" AcceptsTab="True" IsUndoEnabled="False">
+                        <TextBox.CommandBindings>
+                            <CommandBinding Command="Paste" Executed="CommandBinding_Executed" CanExecute="CommandBinding_CanExecute"/>
+                            <CommandBinding Command="Cut" Executed="CommandBinding_Executed_1" CanExecute="CommandBinding_CanExecute"/>
+                        </TextBox.CommandBindings>
+                    </TextBox>
+                    <Label Name="lblErrorAddAsciiEdtr" Content="" Foreground="Red" Height="30" Width="Auto" Margin="18,324,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" />
+                </Grid>
+            </GroupBox>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

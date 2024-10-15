@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>	    
+    <OutputPath>../../../Linux/</OutputPath>
+    <AssemblyName>ReadAsync</AssemblyName>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PreserveCompilationContext>false</PreserveCompilationContext>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../ReadAsync/ReadAsync.cs" />	  
+    <Compile Update="../ReadAsync/Properties/AssemblyInfo.cs" />	  
+    <Reference Include="MercuryAPI">
+	    <HintPath>../../../Linux/MercuryAPI.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="6.0.0" />
+  </ItemGroup>
+
+  <Target Name="Aftercc" AfterTargets="Build">
+          <Exec Command="rm -rf ../../../Linux/runtimes/" />
+          <Exec Command="rm -rf ../../../Linux/refs/" />
+          <Exec Command="rm -rf ../../../Linux/ref/" />
+          <Exec Command="rm -rf ../../../Linux/*.pdb" />
+  </Target>
+
+</Project>

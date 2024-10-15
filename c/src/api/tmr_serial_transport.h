@@ -8,7 +8,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -181,6 +181,9 @@ typedef struct TMR_SR_LlrpEapiTransportContext
 #endif
 
 #ifdef TMR_ENABLE_SERIAL_TRANSPORT_NATIVE
+#if defined(WIN32) || defined(WINCE)
+__declspec(dllexport)
+#endif
 /**
  * Initialize a TMR_SR_SerialTransport structure with a given serial device.
  *
@@ -188,9 +191,6 @@ typedef struct TMR_SR_LlrpEapiTransportContext
  * @param context A TMR_SR_SerialPortNativeContext structure for the callbacks to use.
  * @param device The path or name of the serial device (@c /dev/ttyS0, @c COM1)
  */
-#if defined(WIN32) || defined(WINCE)
-__declspec(dllexport)
-#endif
 TMR_Status TMR_SR_SerialTransportNativeInit(TMR_SR_SerialTransport *transport,
                                             TMR_SR_SerialPortNativeContext *context,
                                             const char *device);
@@ -220,7 +220,8 @@ TMR_Status TMR_SR_LlrpEapiTransportInit(TMR_SR_SerialTransport *transport,
 
 /**
  * Power-cycle a device attached via LLRP transport
- * @param transport The TMR_SR_SerialTransport connected to the device
+ * 
+ * @param this The TMR_SR_SerialTransport connected to the device
  */
 TMR_Status TMR_LlrpEapiPowerCycle(TMR_SR_SerialTransport *this);
 #endif

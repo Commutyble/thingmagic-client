@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2011 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -983,16 +983,6 @@ TMR_LLRP_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
      case TMR_PARAM_READER_STATS_ENABLE:
       {
         uint16_t statsEnable = *(uint16_t *)value;
-
-#ifdef TMR_ENABLE_HF_LF
-        if (statsEnable != TMR_READER_STATS_FLAG_ALL)
-        {
-          if(statsEnable & TMR_READER_STATS_FLAG_DC_VOLTAGE)
-          {
-            return TMR_ERROR_INVALID_READER_STATS;
-          }
-        }
-#endif /* TMR_ENABLE_HF_LF */
 
         statsEnable &= 0xBFFF;
         ret = TMR_LLRP_cmdSetTMStatsEnable(reader, statsEnable);
@@ -2948,6 +2938,8 @@ TMR_LLRP_hasMoreTags(TMR_Reader *reader)
              * Connection might be lost. Indicate an error so that the
              * continuous reading will be stopped.
              **/
+            //Prevent Destroy funcntion to send Close connetion message,since the connection is already closed to avoid SIGPIPE error
+            reader->connected = false;
             return TMR_ERROR_LLRP_READER_CONNECTION_LOST;
           }
         }
@@ -3055,7 +3047,17 @@ TMR_LLRP_hasMoreTags(TMR_Reader *reader)
          **/
         reader->u.llrpReader.unhandledAsyncResponse.lMsg = reader->u.llrpReader.bufResponse[0];
         reader->u.llrpReader.isResponsePending = true;
-
+	/** process LLRP message here **/
+	// applying the GPO Toggling LLRP message should be handled here...
+	if ( NULL != lr->bufResponse[0])
+	{
+          reader->finishedReading = true;
+	  //Slow memory leak issue FIXED here...
+	  //(as seen with top command as %0.1 per 1 minute) 
+	  //%MEM growth issue RESOLVED 
+          TMR_LLRP_freeMessage(lr->bufResponse[0]);
+          lr->bufResponse[0] = NULL;
+	}	
         return TMR_ERROR_NO_TAGS;
       }
     }
@@ -3279,12 +3281,14 @@ TMR_LLRP_executeTagOp(TMR_Reader *reader, TMR_TagOp *tagop,
     /**
      * Protocol to use is specified in /reader/tagop/protocol
      **/
+#ifdef TMR_ENABLE_ISO180006B
     if ((TMR_TAGOP_ISO180006B_READDATA == tagop->type) || (TMR_TAGOP_ISO180006B_WRITEDATA == tagop->type)
                                           ||(TMR_TAGOP_ISO180006B_LOCK == tagop->type))
     {
       protocol = TMR_TAG_PROTOCOL_ISO180006B;
     }
     else
+#endif /* TMR_ENABLE_ISO180006B */
     {
       protocol = reader->tagOpParams.protocol;
     }
@@ -3479,7 +3483,7 @@ TMR_LLRP_readTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
 TMR_Status
 TMR_LLRP_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                          uint32_t bank, uint32_t address,
-                         uint16_t count,const uint8_t data[])
+                         uint16_t count,const uint8_t *data, TMR_uint8List* response)
 {
   TMR_Status ret;
   /*
@@ -3493,7 +3497,7 @@ TMR_LLRP_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter
 TMR_Status
 TMR_LLRP_writeTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                          uint32_t bank, uint32_t address,
-                         uint16_t count, const uint16_t *data)
+                         uint16_t count, const uint16_t *data, TMR_uint8List* response)
 {
   TMR_Status ret;
   /*

@@ -105,7 +105,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -128,8 +132,6 @@ int main(int argc, char *argv[])
   TMR_TagOp tagop;
   TMR_GEN2_Password accessPassword = 0x0;
   uint8_t mask[4];
-  int32_t readPower;
-  int32_t writePower;
   TMR_GEN2_Session session;
   TMR_Monza4_ControlByte controlByte;
   TMR_Monza4_Payload payload;
@@ -212,40 +214,29 @@ int main(int argc, char *argv[])
     ret = TMR_paramSet(rp, TMR_PARAM_REGION_ID, &region);
     checkerr(rp, ret, 1, "setting region");  
   }
-
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
   //Use first antenna for operation
   if (NULL != antennaList)
   {
     ret = TMR_paramSet(rp, TMR_PARAM_TAGOP_ANTENNA, &antennaList[0]);
     checkerr(rp, ret, 1, "setting tagop antenna");  
   }
-  
-  /* setup the reader */
-  readPower = 0x0BB8;
-  ret = TMR_paramSet(rp, TMR_PARAM_RADIO_READPOWER, &readPower);
-  checkerr(rp, ret, 1, "setting read power");
 
-  writePower = 0x0BB8;
-  ret = TMR_paramSet(rp, TMR_PARAM_RADIO_WRITEPOWER, &writePower);
-  checkerr(rp, ret, 1, "setting write power");
+  /* setup the reader */
+  {
+    /* Get the max power and set it. */
+    int16_t maxPower;
+    uint32_t power;
+
+    ret = TMR_paramGet(rp, TMR_PARAM_RADIO_POWERMAX, &maxPower);
+    checkerr(rp, ret, 1, "getting radio max power");
+
+    power = (uint32_t)maxPower;
+    ret = TMR_paramSet(rp, TMR_PARAM_RADIO_READPOWER, &power);
+    checkerr(rp, ret, 1, "setting radio read power");
+
+    ret = TMR_paramSet(rp, TMR_PARAM_RADIO_WRITEPOWER, &power);
+    checkerr(rp, ret, 1, "setting radio write power");
+  }
 
   session = TMR_GEN2_SESSION_S0;
   ret = TMR_paramSet(rp,TMR_PARAM_GEN2_SESSION, &session);

@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A25D7F76-93E0-435D-9C9F-36306CF5DE93}</ProjectGuid>
+    <RootNamespace>MercuryAPI</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>16.0.30804.86</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>.\Release\</OutDir>
+    <IntDir>$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <PreBuildEvent>
+      <Command>PUSHD "$(SolutionDir)\..\..\src\api\ltkc_win32\"
+if not exist lib\libltkc.lib (
+goto buildLTKC
+)
+if not exist lib\libltkctm.lib (
+goto buildLTKC
+) ELSE (
+goto exitLTKC
+)
+
+:buildLTKC
+call "gencode.bat"
+msbuild "proj\libltkc\libltkc.vcxproj" /t:Rebuild
+msbuild "proj\libltkcllrporg\libltkcllrporg.vcxproj" /t:Rebuild
+
+:exitLTKC
+POPD</Command>
+    </PreBuildEvent>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..\src\arch\win32\include;..\..\src\api;..\..\src\api\ltkc_win32\inc</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;READER_EXPORTS;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <PrecompiledHeaderFile />
+      <WarningLevel>Level3</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <AdditionalOptions>-DHAVE_STRUCT_TIMESPEC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>pthreadVC2.lib;libltkc.lib;libltkctm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\src\api\ltkc_win32\lib;..\..\src\arch\win32\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..\src\arch\win64\include;..\..\src\api;..\..\src\api\ltkc_win32\inc</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;READER_EXPORTS;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+      <AdditionalOptions>-DHAVE_STRUCT_TIMESPEC %(AdditionalOptions)</AdditionalOptions>
+      <OmitFramePointers>false</OmitFramePointers>
+    </ClCompile>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>pthreadVC2.lib;libltkc.lib;libltkctm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\src\api\ltkc_win32\lib\win64;..\..\src\arch\win64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <PreBuildEvent>
+      <Command>PUSHD "$(SolutionDir)\..\..\src\api\ltkc_win32\"
+if not exist lib\libltkc.lib (
+goto buildLTKC
+)
+if not exist lib\libltkctm.lib (
+goto buildLTKC
+) ELSE (
+goto exitLTKC
+)
+
+:buildLTKC
+call "gencode.bat"
+msbuild "proj\libltkc\libltkc.vcxproj" /t:Rebuild
+msbuild "proj\libltkcllrporg\libltkcllrporg.vcxproj" /t:Rebuild
+
+:exitLTKC
+POPD
+</Command>
+    </PreBuildEvent>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\..\src\arch\win32\include;..\..\src\api;..\..\src\api\ltkc_win32\inc</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;READER_EXPORTS;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalOptions>-DHAVE_STRUCT_TIMESPEC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>pthreadVC2.lib;libltkc.lib;libltkctm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\src\api\ltkc_win32\lib;..\..\src\arch\win32\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\..\src\arch\win64\include;..\..\src\api;..\..\src\api\ltkc_win32\inc</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;READER_EXPORTS;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <AdditionalOptions>-DHAVE_STRUCT_TIMESPEC %(AdditionalOptions)</AdditionalOptions>
+      <OmitFramePointers>false</OmitFramePointers>
+    </ClCompile>
+    <ProjectReference>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <Lib>
+      <AdditionalDependencies>pthreadVC2.lib;libltkc.lib;libltkctm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\src\api\ltkc_win32\lib\win64;..\..\src\arch\win64\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\api\hex_bytes.c" />
+    <ClCompile Include="..\..\src\api\llrp_reader.c" />
+    <ClCompile Include="..\..\src\api\llrp_reader_l3.c" />
+    <ClCompile Include="..\..\src\api\osdep_win32.c" />
+    <ClCompile Include="..\..\src\api\serial_reader.c" />
+    <ClCompile Include="..\..\src\api\serial_reader_l3.c" />
+    <ClCompile Include="..\..\src\api\serial_transport_llrp.c" />
+    <ClCompile Include="..\..\src\api\serial_transport_tcp_win32.c" />
+    <ClCompile Include="..\..\src\api\serial_transport_win32.c" />
+    <ClCompile Include="..\..\src\api\tmr_loadsave_configuration.c" />
+    <ClCompile Include="..\..\src\api\tmr_param.c" />
+    <ClCompile Include="..\..\src\api\tmr_strerror.c" />
+    <ClCompile Include="..\..\src\api\tmr_utils.c" />
+    <ClCompile Include="..\..\src\api\tm_reader.c" />
+    <ClCompile Include="..\..\src\api\tm_reader_async.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\api\inttypes.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_base.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_connection.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_frame.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_genoutmac.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_platform.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\ltkc_xmltext.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\out_ltkc.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\out_tm_ltkc.h" />
+    <ClInclude Include="..\..\src\api\ltkc_win32\inc\tm_ltkc.h" />
+    <ClInclude Include="..\..\src\api\osdep.h" />
+    <ClInclude Include="..\..\src\api\serial_reader_imp.h" />
+    <ClInclude Include="..\..\src\api\tmr_filter.h" />
+    <ClInclude Include="..\..\src\api\tmr_gen2.h" />
+    <ClInclude Include="..\..\src\api\tmr_gpio.h" />
+    <ClInclude Include="..\..\src\api\tmr_ipx.h" />
+    <ClInclude Include="..\..\src\api\tmr_iso14443a.h" />
+    <ClInclude Include="..\..\src\api\tmr_iso15693.h" />
+    <ClInclude Include="..\..\src\api\tmr_iso180006b.h" />
+    <ClInclude Include="..\..\src\api\tmr_lf125khz.h" />
+    <ClInclude Include="..\..\src\api\tmr_lf134khz.h" />
+    <ClInclude Include="..\..\src\api\tmr_llrp_reader.h" />
+    <ClInclude Include="..\..\src\api\tmr_params.h" />
+    <ClInclude Include="..\..\src\api\tmr_read_plan.h" />
+    <ClInclude Include="..\..\src\api\tmr_region.h" />
+    <ClInclude Include="..\..\src\api\tmr_serial_reader.h" />
+    <ClInclude Include="..\..\src\api\tmr_serial_transport.h" />
+    <ClInclude Include="..\..\src\api\tmr_status.h" />
+    <ClInclude Include="..\..\src\api\tmr_tagop.h" />
+    <ClInclude Include="..\..\src\api\tmr_tag_auth.h" />
+    <ClInclude Include="..\..\src\api\tmr_tag_data.h" />
+    <ClInclude Include="..\..\src\api\tmr_tag_lock_action.h" />
+    <ClInclude Include="..\..\src\api\tmr_tag_protocol.h" />
+    <ClInclude Include="..\..\src\api\tmr_types.h" />
+    <ClInclude Include="..\..\src\api\tmr_utils.h" />
+    <ClInclude Include="..\..\src\api\tm_config.h" />
+    <ClInclude Include="..\..\src\api\tm_reader.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\api\Makefile" />
+    <None Include="..\..\src\api\Makefile.jni" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -54,11 +54,11 @@ typedef struct properties
   char valueConfig[CONFIG_MAX_BUFFER_LEN];
 }properties;
 
-typedef enum paramOption
+typedef enum TMR_LoadSaveparam
 {
   PARAM_OPTION_GET = 0x00,
   PARAM_OPTION_SET = 0x01,
-}paramOption;
+}TMR_LoadSaveparam;
 
 /* Private: Should not be used by user level application. */
 #ifdef TMR_ENABLE_UHF
@@ -71,18 +71,20 @@ static const char *tagEncodingNames[] = {"FM0", "M2", "M4", "M8"};
 static const char *sessionNames[] = {"S0", "S1", "S2", "S3"};
 static const char *targetNames[] = {"A", "B", "AB", "BA"};
 static const char *tariNames[] = {"TARI_25US", "TARI_12_5US", "TARI_6_25US"};
+static const char *rfModeNames[] = { "RFMODE_160_M8_20", "RFMODE_250_M4_20", "RFMODE_320_M2_15", "RFMODE_320_M2_20", "RFMODE_320_M4_20", 
+                                     "RFMODE_640_FM0_7_5", "RFMODE_640_M2_7_5", "RFMODE_640_M4_7_5"};
 static const char *modeNames[] = {"CONTINUOUS", "TIMED"};
 static const char *modulationNames[] = {NULL, "CW","PRBS"};
 static const char *gen2LinkFrequencyNames[] = {"LINK250KHZ", "LINK300KHZ", "LINK320KHZ", "LINK40KHZ", "LINK640KHZ"};
 static const char *bankNames[] = {"Reserved", "EPC", "TID", "User"};
 static const char *tagopNames[] = {NULL, "ReadData"};
 #endif /* TMR_ENABLE_UHF */
-static const char *protocolNames[] = {NULL, NULL, NULL, "ISO180006B", NULL, "GEN2", "ISO180006B_UCODE", "IPX64", "IPX256", "ISO14443A", "ISO14443B", "ISO15693", "ISO18092",
+static const char *protocolNames[] = {"NONE", NULL, NULL, "ISO180006B", NULL, "GEN2", "ISO180006B_UCODE", "IPX64", "IPX256", "ISO14443A", "ISO14443B", "ISO15693", "ISO18092",
                                       "FELICA", "ISO18000_3M3", NULL, NULL, NULL, NULL, NULL, "LF125KHZ", "LF134KHZ", NULL, NULL, NULL, NULL, NULL, NULL, NULL, "ATA"};
 #ifdef TMR_ENABLE_HF_LF
 static const char *ISO1443ATagtypeNames[] = {"AUTO_DETECT", "MIFARE_PLUS", "MIFARE_ULTRALIGHT", "MIFARE_CLASSIC", "NTAG", "MIFARE_DESFIRE", "MIFARE_MINI", "ULTRALIGHT_NTAG"};
 static const char *ISO15693TagtypeNames[] = {"AUTO_DETECT", "HID_ICLASS_SE", "ICODE_SLI", "ICODE_SLI_L", "ICODE_SLI_S", "ICODE_DNA",
-                                             "ICODE_SLIX", "ICODE_SLIX_L", "ICODE_SLIX_S", "ICODE_SLIX_2"};
+                                             "ICODE_SLIX", "ICODE_SLIX_L", "ICODE_SLIX_S", "ICODE_SLIX_2", "VIGO", "TAGIT", "PICOPASS"};
 static const char *ISO1443BTagtypeNames[] = {"AUTO_DETECT", "CALYSO", "CALYPSO_INNOVATRON_PROTOCOL", "CTS",
                                              "MONEO", "PICO_PASS", "SRI4K", "SRIX4K", "SRI512", "SRT512"};
 static const char *LF125KHZTagtypeNames[] = {"AUTO_DETECT", "HID_PROX", "AWID", "HITAG_1", "HITAG_2", "EM_4100", "KERI", "INDALA"};
@@ -99,7 +101,7 @@ static void printReadPlan(const char *string, TMR_ReadPlan *plan, int *nchars);
 static bool strcasecmpcount(const char *a, const char *b, int *matches);
 const char *listname(const char *list[], int listlen, unsigned int id);
 static int listid(const char *list[], int listlen, const char *name);
-static TMR_Status getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *string, paramOption option);
+static TMR_Status getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *string, TMR_LoadSaveparam option);
 static TMR_Status loadConfiguration(struct TMR_Reader *reader, char *filePath, properties *dict, uint8_t noOfEntries, bool isRollBack);
 static TMR_Status rollBackConfigData(struct TMR_Reader *reader, char *filePath);
 static int parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars);
@@ -410,7 +412,6 @@ isParamWritable(TMR_Param key)
   case TMR_PARAM_REGION_LBT_THRESHOLD:
   case TMR_PARAM_REGION_DWELL_TIME:
   case TMR_PARAM_REGION_DWELL_TIME_ENABLE:
-  case TMR_PARAM_RADIO_ENABLEPOWERSAVE:
   case TMR_PARAM_GEN2_BAP:
   case TMR_PARAM_ISO180006B_MODULATION_DEPTH:
   case TMR_PARAM_ISO180006B_DELIMITER:
@@ -422,7 +423,6 @@ isParamWritable(TMR_Param key)
   case TMR_PARAM_READER_WRITE_REPLY_TIMEOUT:
   case TMR_PARAM_READER_DESCRIPTION:
   case TMR_PARAM_READER_HOSTNAME:
-  case TMR_PARAM_EXTENDEDEPC:
   case TMR_PARAM_MANAGE_LICENSE_KEY:
   case TMR_PARAM_LICENSED_FEATURES:
   case TMR_PARAM_SELECTED_PROTOCOLS:
@@ -442,6 +442,7 @@ isParamWritable(TMR_Param key)
   case TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES:
   case TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES:
   case TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES:
+  case TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT:
   case TMR_PARAM_RADIO_KEEP_RF_ON:
   case TMR_PARAM_PROTOCOL_LIST:
 #endif /* TMR_ENABLE_HF_LF */
@@ -494,87 +495,93 @@ parseTagop(const char *arg, TMR_TagOp **tagopp, int *nchars)
   id = listid(tagopNames, numberof(tagopNames), buf);
   if (-1 == id)
   {
-    goto error;
+    free(tagop);
+    return -1;
   }
 
   arg += charcount;
   tagop->type = id;
+
   switch (tagop->type)
   {
-  case TMR_TAGOP_GEN2_READDATA:
-  {
-    TMR_GEN2_Bank bank;
-    int address,  wordLen;
-
-    bank = 0x00;
-    address = 0x00;
-    wordLen = 0x00;
-
-    arg++;
-    while (']' != *arg)
-    {
-      arg++;
-      if (1 != sscanf(arg, "%[^]=]%n", buf, &charcount))
+    case TMR_TAGOP_GEN2_READDATA:
       {
+        TMR_GEN2_Bank bank;
+        int address,  wordLen;
+
+        bank = 0x00;
+        address = 0x00;
+        wordLen = 0x00;
+
+        arg++;
+        while (']' != *arg)
+        {
+          arg++;
+          if (1 != sscanf(arg, "%[^]=]%n", buf, &charcount))
+          {
+            return -1;
+          }
+
+          if (0x00 == strcmp("Bank", buf))
+          {
+            arg += charcount;
+            arg++;
+            
+            if (1 != sscanf(arg, "%[^],]%n", buf, &charcount))
+            {
+              return -1;
+            }
+
+            arg += charcount;
+            id = listid(bankNames, numberof(bankNames), buf);
+            if (-1 == id)
+            {
+              free(tagop);
+              return -1;
+            }
+            bank = id;
+          }
+          else if (0x00 == strcmp("WordAddress", buf))
+          {
+            arg += charcount;
+            arg++;
+            if (1 != sscanf(arg, "%[^],]%n", buf, &charcount))
+            {
+              return -1;
+            }
+            arg += charcount;
+            address = atol(buf);
+          }
+          else if (0x00 == strcmp("Len", buf))
+          {
+            arg += charcount;
+            arg++;
+            if (1 != sscanf(arg, "%[^]]%n", buf, &charcount))
+            {
+              return -1;
+            }
+            arg += charcount;
+            wordLen = atol(buf);
+          }
+        }
+        TMR_TagOp_init_GEN2_ReadData(tagop, bank, address, wordLen);
+        break;
+      }
+    default:
+      {
+        /* Currently supporting only Gen2 Read Data */
+        free(tagop);
         return -1;
       }
-      if (0x00 == strcmp("Bank", buf))
-      {
-        arg += charcount;
-        arg++;
-        if (1 != sscanf(arg, "%[^],]%n", buf, &charcount))
-        {
-          return -1;
-        }
-        arg += charcount;
-        id = listid(bankNames, numberof(bankNames), buf);
-        if (-1 == id)
-        {
-          goto error;
-        }
-        bank = id;
-      }
-      else if (0x00 == strcmp("WordAddress", buf))
-      {
-        arg += charcount;
-        arg++;
-        if (1 != sscanf(arg, "%[^],]%n", buf, &charcount))
-        {
-          return -1;
-        }
-        arg += charcount;
-        address = atol(buf);
-      }
-      else if (0x00 == strcmp("Len", buf))
-      {
-        arg += charcount;
-        arg++;
-        if (1 != sscanf(arg, "%[^]]%n", buf, &charcount))
-        {
-          return -1;
-        }
-        arg += charcount;
-        wordLen = atol(buf);
-      }
-    }
-
-    TMR_TagOp_init_GEN2_ReadData(tagop, bank, address, wordLen);
-    break;
-  }
-  default:
-    /* Currently supporting only Gen2 Read Data */
-    goto error;
   }
 
   if (NULL != nchars)
+  {
     *nchars = (int)(arg - orig);
+  }
 
   *tagopp = tagop;
   return 0;
-
-error:
-  free(tagop);
-  return -1;
 #endif /* TMR_ENABLE_UHF */
 }
 
@@ -839,7 +846,8 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
         bank = listid(bankNames, numberof(bankNames), numbuf);
         if (-1 == bank)
         {
-          goto error;
+          free(filter);
+          return -1;
         }
       }
       else if (0x00 == strcmp(numbuf, "BitPointer"))
@@ -879,7 +887,8 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
         if (TMR_SUCCESS != ret)
         {
           free(mask);
-          goto error;
+          free(filter);
+          return -1;
         }
       }
     }
@@ -915,14 +924,17 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
     next = strchr(arg, ',');
     if (NULL == next)
     {
-    goto error;
-  }
+      free(filter);
+      return -1;
+    }
+
     strncpy(buf, arg, next-arg);
     buf[next-arg] = '\0';
     selectOp = listid(selectOptionNames, numberof(selectOptionNames), buf);
     if (-1 == selectOp)
     {
-      goto error;
+      free(filter);
+      return -1;
     }
     arg = next + 1;
 
@@ -930,7 +942,8 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
     next = strchr(arg, ',');
     if (NULL == next || next - arg > 16)
     {
-      goto error;
+      free(filter);
+      return -1;
     }
     strncpy(buf, arg, next-arg);
     buf[next-arg] = '\0';
@@ -941,7 +954,8 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
     next = strchr(arg, ',');
     if (NULL == next || next - arg > 16)
     {
-      goto error;
+      free(filter);
+      return -1;
     }
     strncpy(buf, arg, next-arg);
     buf[next-arg] = '\0';
@@ -951,12 +965,14 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
     len = (int)strspn(arg, hexChars) / 2;
     if (8 != len)
     {
-      goto error;
+      free(filter);
+      return -1;
     }
     ret = TMR_hexToBytes(arg, bytes, len, NULL);
     if (TMR_SUCCESS != ret)
     {
-      goto error;
+      free(filter);
+      return -1;
     }
 #ifdef TMR_ENABLE_ISO180006B    
 
@@ -971,15 +987,12 @@ parseFilter(const char *arg, TMR_TagFilter **filterp, int *nchars)
   }
   else
   {
-    goto error;
+   free(filter);
+    return -1;
   }
 
   *filterp = filter;
   return 0;
-
-error:
-  free(filter);
-  return -1;
 #endif /* TMR_ENABLE_UHF */
 }
 
@@ -1005,12 +1018,11 @@ parseU8List(const char *arg, TMR_uint8List *list, int *nchars)
     if (u32list.list[i] > UINT8_MAX)
     {
       ret = -1;
-      goto out;
+      break;
     }
     list->list[i] = (uint8_t)u32list.list[i];
   }
 
-out:
   free(u32list.list);
   return ret;
 }
@@ -1415,14 +1427,7 @@ parseReadPlan(struct TMR_Reader *reader, const char *arg, TMR_ReadPlan *plan, in
     plan->type = TMR_READ_PLAN_TYPE_SIMPLE;
 
     /* Initialize the simple read plan with default read pln */
-    if (TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])
-	{
-      TMR_RP_init_simple(plan, 0, NULL, TMR_TAG_PROTOCOL_GEN2, 1);
-	}
-	else
-	{
-      TMR_RP_init_simple(plan, 0, NULL, TMR_TAG_PROTOCOL_ISO14443A, 1);
-	}
+    TMR_RP_init_simple(plan, 0, NULL, TMR_TAG_PROTOCOL_NONE, 1);
 
     /* skip the leading '[' */
     while (']' != *srpSubString)
@@ -1472,20 +1477,10 @@ parseReadPlan(struct TMR_Reader *reader, const char *arg, TMR_ReadPlan *plan, in
         //*nchars += charcount;
         /* skip the '=' symbol */
         srpSubString++;
-        if (TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])
-		{
-		  if (1 != sscanf(srpSubString, "%[^]]]%n", protocolName, &charcount))
-          {
-            return -1;
-          }
-		}
-		else
-		{
-          if (1 != sscanf(srpSubString, "%[^],]%n", protocolName, &charcount))
-          {
-            return -1;
-          }
-		}
+        if (1 != sscanf(srpSubString, "%[^]]]%n", protocolName, &charcount))
+        {
+          return -1;
+        }
 
         if (0 != strncasecmp(srpSubString, "NULL", 4))
         {
@@ -1505,11 +1500,7 @@ parseReadPlan(struct TMR_Reader *reader, const char *arg, TMR_ReadPlan *plan, in
         srpSubString += charcount;
         /* skip the '=' symbol */
         srpSubString++;
-#ifdef TMR_ENABLE_HF_LF
-        if (1 != sscanf(srpSubString, "%[^],]%n", protocolName, &charcount))
-#else
         if (1 != sscanf(srpSubString, "%[^]]]%n", protocolName, &charcount))
-#endif /* TMR_ENABLE_HF_LF */
         {
           return -1;
         }
@@ -1530,7 +1521,6 @@ parseReadPlan(struct TMR_Reader *reader, const char *arg, TMR_ReadPlan *plan, in
       else if (0x00 == strcmp("UseFastSearch", protocolName))
       {
 #ifdef TMR_ENABLE_UHF
-        if (TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])
 		{
           srpSubString += charcount;
           /* skip the '=' symbol */
@@ -1549,11 +1539,7 @@ parseReadPlan(struct TMR_Reader *reader, const char *arg, TMR_ReadPlan *plan, in
             plan->u.simple.useFastSearch = false;
           }
 		}
-		else
 #endif /* TMR_ENABLE_UHF */
-		{
-          return -1;
-	    }
       }
       else if(0x00 == strcmp("Weight", protocolName))
       {
@@ -1640,7 +1626,7 @@ static void
 printReadPlan(const char *string, TMR_ReadPlan *plan, int *nchars)
 {
   TMR_String temp;
-  char str[100];
+  char str[256];
   char *end;
   int charRead;
 
@@ -1818,17 +1804,13 @@ printMetadataFlags(const char *string, TMR_TRD_MetadataFlag *flags)
 }
 #endif /* TMR_ENABLE_UHF */
 static TMR_Status
-getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *string, paramOption option)
+getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *string, TMR_LoadSaveparam option)
 {
   TMR_Status ret;
   TMR_Param param;
   TMR_String temp;
   char str[CONFIG_MAX_BUFFER_LEN];
   char *end;
-#ifdef TMR_ENABLE_UHF
-  TMR_SR_SerialReader *sr;
-  sr = &reader->u.serialReader;
-#endif /* TMT_ENABLE_UHF */
  
   ret = TMR_SUCCESS;
   end = string->value;
@@ -1849,46 +1831,47 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
   case TMR_PARAM_GPIO_INPUTLIST:
   case TMR_PARAM_GPIO_OUTPUTLIST:
     {
-      if (PARAM_OPTION_GET == option)
+      if(TMR_READER_TYPE_LLRP != reader->readerType)
       {
-        /* The param get */
-        TMR_uint8List value;
-        uint8_t valueList[64];
-
-        value.max = numberof(valueList);
-        value.list = valueList;
-
-        ret = TMR_paramGet(reader, param, &value);
-        if (TMR_SUCCESS == ret)
+        if (PARAM_OPTION_GET == option)
         {
-          printU8List(&temp, &value);
-          end += sprintf(end, "%s", temp.value);
+          /* The param get */
+          TMR_uint8List value;
+          uint8_t valueList[64];
+
+          value.max = numberof(valueList);
+          value.list = valueList;
+
+          ret = TMR_paramGet(reader, param, &value);
+          if (TMR_SUCCESS == ret)
+          {
+            printU8List(&temp, &value);
+            end += sprintf(end, "%s", temp.value);
+          }
+        }
+        else
+        {
+          {
+            /* The param set */
+            TMR_uint8List value;
+
+            if (-1 == parseU8List(end, &value, NULL))
+            {
+              char errMsg[256];
+              sprintf(errMsg, "Can't parse '%s' as list of 8-bit values", end);
+              logErrorMessage(reader, errMsg);
+              notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
+              return TMR_ERROR_INVALID;
+            }
+            ret = TMR_paramSet(reader, param, &value);
+            free(value.list);
+          }
         }
       }
       else
       {
-        if((TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]) ||
-           (TMR_READER_TYPE_LLRP == reader->readerType))
-        {
-          ret = TMR_ERROR_READONLY;
-        }
-		else
-		{
-          /* The param set */
-          TMR_uint8List value;
-
-          if (-1 == parseU8List(end, &value, NULL))
-          {
-            char errMsg[256];
-            sprintf(errMsg, "Can't parse '%s' as list of 8-bit values", end);
-            logErrorMessage(reader, errMsg);
-            notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
-            return TMR_ERROR_INVALID;
-          }
-          ret = TMR_paramSet(reader, param, &value);
-          free(value.list);
-        }
-	  }
+         ret = TMR_ERROR_READONLY;
+      }
       break;
     }
 #endif /* TMR_ENABLE_UHF */
@@ -1937,7 +1920,6 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
   case TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYDATA:
-  case TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM:
   case TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT:
   case TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT:
   case TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT:
@@ -2259,6 +2241,81 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
       }
       break;
     }
+  case TMR_PARAM_GEN2_RFMODE:
+  {
+    if (PARAM_OPTION_GET == option)
+    {
+      /* The param get */
+      TMR_GEN2_RFMode value;
+
+      ret = TMR_paramGet(reader, param, &value);
+      if (TMR_SUCCESS == ret)
+      {
+        int temp = value;
+        switch (temp)
+        {
+        case 285: value = 0;
+          break;
+        case 244: value = 1;
+          break;
+        case 223: value = 2;
+          break;
+        case 222: value = 3;
+          break;
+        case 241: value = 4;
+          break;
+        case 302: value = 5;
+          break;
+        case 323: value = 6;
+          break;
+        case 344: value = 7;
+          break;
+        default:;
+        }
+        end += sprintf(end, "%s", listname(rfModeNames, numberof(rfModeNames), value));
+      }
+    }
+    else
+    {
+      /* The param set */
+      TMR_GEN2_RFMode rf;
+      int temp = 0;
+
+      rf = listid(rfModeNames, numberof(rfModeNames), end);
+      temp = rf;
+      switch (temp)
+      {
+      case 0: rf = 285;
+        break;
+      case 1: rf = 244;
+        break;
+      case 2: rf = 223;
+        break;
+      case 3: rf = 222;
+        break;
+      case 4: rf = 241;
+        break;
+      case 5: rf = 302;
+        break;
+      case 6: rf = 323;
+        break;
+      case 7: rf = 344;
+        break;
+      default:;
+      }
+
+      if (rf == -1)
+      {
+        char errMsg[256];
+        sprintf(errMsg, "Can't parse '%s' as a Gen2 RF Mode", end);
+        logErrorMessage(reader, errMsg);
+        notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
+        return TMR_ERROR_INVALID;
+      }
+      ret = TMR_paramSet(reader, param, &rf);
+    }
+    break;
+  }
   case TMR_PARAM_RADIO_READPOWER:
   case TMR_PARAM_RADIO_WRITEPOWER:
   case TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT:
@@ -2440,6 +2497,7 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
   case TMR_PARAM_ANTENNA_SETTLINGTIMELIST:
   case TMR_PARAM_RADIO_PORTREADPOWERLIST:
   case TMR_PARAM_RADIO_PORTWRITEPOWERLIST:
+  case TMR_PARAM_PER_ANTENNA_TIME:
     {
       if (PARAM_OPTION_GET == option)
       {
@@ -2470,7 +2528,11 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
           notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
           return TMR_ERROR_INVALID;
         }
-        ret = TMR_paramSet(reader, param, &value);
+
+        if (value.len)
+        {
+          ret = TMR_paramSet(reader, param, &value);
+        }
         free(value.list);
       }
       break;
@@ -2478,41 +2540,42 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
 
   case TMR_PARAM_REGION_ID:
     {
-      if (PARAM_OPTION_GET == option)
+      if(TMR_READER_TYPE_LLRP != reader->readerType)
       {
-        /* The param get */
-        TMR_Region region;
-
-        ret = TMR_paramGet(reader, param, &region);
-        if (TMR_SUCCESS == ret)
+        if (PARAM_OPTION_GET == option)
         {
-          end += sprintf(end, "%s", regionName(region));
+          /* The param get */
+          TMR_Region region;
+
+          ret = TMR_paramGet(reader, param, &region);
+          if (TMR_SUCCESS == ret)
+          {
+            end += sprintf(end, "%s", regionName(region));
+          }
+        }
+        else
+        {
+          {
+            /* The param set */
+            TMR_Region region;
+
+            region = regionID(end);
+            if (TMR_REGION_NONE == region)
+            {
+              char errMsg[256];
+              sprintf(errMsg, "Can't parse '%s' as a region name", end);
+              logErrorMessage(reader, errMsg);
+              notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
+              return TMR_ERROR_INVALID;
+            }
+            ret = TMR_paramSet(reader, param, &region);
+          }
         }
       }
       else
       {
-        if((TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]) ||
-           (TMR_READER_TYPE_LLRP == reader->readerType))
-        {
-          ret = TMR_ERROR_READONLY;
-        }
-		else
-		{
-		  /* The param set */
-          TMR_Region region;
-
-          region = regionID(end);
-          if (TMR_REGION_NONE == region)
-          {
-            char errMsg[256];
-            sprintf(errMsg, "Can't parse '%s' as a region name", end);
-            logErrorMessage(reader, errMsg);
-            notify_exception_listeners(reader, TMR_ERROR_LOADSAVE_CONFIG);
-            return TMR_ERROR_INVALID;
-          }
-          ret = TMR_paramSet(reader, param, &region);
-		}
-	  }
+        ret = TMR_ERROR_READONLY; 
+      }
       break;
     }
   case TMR_PARAM_POWERMODE:
@@ -2864,6 +2927,7 @@ getSetOneParam(struct TMR_Reader *reader, const char *paramName, TMR_String *str
                   break;
                 }
               default:
+                  ret = TMR_ERROR_NOT_FOUND;
                   break;
             }
 

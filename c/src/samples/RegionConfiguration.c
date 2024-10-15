@@ -112,7 +112,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -272,28 +276,6 @@ int main(int argc, char *argv[])
 #endif
   }
 
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-#ifndef BARE_METAL
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-#endif
-    }
-    else
-    {
-#ifndef BARE_METAL
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-#endif
-    }
-  }
   value.max = numberof(valueList);
   value.len = numberof(valueList);
   value.list = valueList;
@@ -431,13 +413,6 @@ int main(int argc, char *argv[])
   //  ret = TMR_paramSet(rp, TMR_PARAM_USER_CONFIG, &config);
   //  checkerr(rp, ret, 1, "setting configuration: restore all saved configuration params");
   //  printf("User config set option:restore all saved configuration params\n");
-
-  //  //Step 12 - Init UserConfigOp structure to verify all saved configuration parameters
-  //  TMR_init_UserConfigOp(&config, TMR_USERCONFIG_VERIFY);
-  //  ret = TMR_paramSet(rp, TMR_PARAM_USER_CONFIG, &config);
-  //  checkerr(rp, ret, 1, "setting configuration: verify all saved configuration params");
-  //  printf("User config set option:verify all configuration\n");
-  //}
 
   //Initialize the read plan
   ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_GEN2, 1000);

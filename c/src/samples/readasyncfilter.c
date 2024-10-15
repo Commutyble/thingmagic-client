@@ -93,7 +93,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -121,15 +125,15 @@ int main(int argc, char *argv[])
   TMR_Reader r, *rp;
   TMR_Status ret;
   TMR_Region region;
-#ifdef TMR_ENABLE_UHF
   TMR_ReadPlan plan;
   TMR_ReadListenerBlock rlb;
   TMR_ReadExceptionListenerBlock reb;
-#endif /* TMR_ENABLE_UHF */
   uint8_t *antennaList = NULL;
   uint8_t buffer[20];
   uint8_t i;
   uint8_t antennaCount = 0x0;
+  char string[100];
+  TMR_String model;
 #if USE_TRANSPORT_LISTENER
   TMR_TransportListenerBlock tb;
 #endif
@@ -203,35 +207,28 @@ int main(int argc, char *argv[])
     ret = TMR_paramSet(rp, TMR_PARAM_REGION_ID, &region);
     checkerr(rp, ret, 1, "setting region");  
   }
-#ifdef TMR_ENABLE_UHF
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
+
+  model.value = string;
+  model.max   = sizeof(string);
+  TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
+  checkerr(rp, ret, 1, "Getting version model");
+
   /**
   * for antenna configuration we need two parameters
   * 1. antennaCount : specifies the no of antennas should
   *    be included in the read plan, out of the provided antenna list.
   * 2. antennaList  : specifies  a list of antennas for the read plan.
-  **/ 
-
+  **/
   // initialize the read plan 
-  ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_GEN2, 1000);
-  checkerr(rp, ret, 1, "initializing the  read plan");
+  if (0 != strcmp("M3e", model.value))
+  {
+    ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_GEN2, 1000);
+  }
+  else
+  {
+    ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_ISO14443A, 1000);
+  }
+  checkerr(rp, ret, 1, "initializing the read plan");
 
   /* Commit read plan */
   ret = TMR_paramSet(rp, TMR_PARAM_READ_PLAN, &plan);
@@ -269,7 +266,7 @@ int main(int argc, char *argv[])
   // Print results of search, accumulated in listener object
   printf("Matching tags: %d\n", matched);
   printf("Non-matching tags: %d\n", nonMatched);
-#endif /* TMR_ENABLE_UHF */
+
   TMR_destroy(rp);
   return 0;
 

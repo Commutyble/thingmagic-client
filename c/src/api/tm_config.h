@@ -10,7 +10,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,13 +38,160 @@ extern "C" {
 /**
  * API version number
  */
-#define TMR_VERSION "1.35.1.103"
+#define TMR_VERSION "1.37.4.8"
 
 /**
  * Define this to enable support for devices that support the serial
- * reader command set (M5e, M6e, Vega, etc.)
+ * reader command set (M6e, M7e, etc.)
  */
 #define TMR_ENABLE_SERIAL_READER
+
+/**
+* Assign value as 1 to Enable required Param
+* Assign value as 0 to Disable required Param
+*/
+ #define  ENABLE_TMR_PARAM_REGION_ID                                    1
+ #define  ENABLE_TMR_PARAM_POWERMODE                                    1
+ #define  ENABLE_TMR_PARAM_VERSION_MODEL                                1
+ #define  ENABLE_TMR_PARAM_REGION_SUPPORTEDREGIONS                      1
+ #define  ENABLE_TMR_PARAM_BAUDRATE                                     1
+ #define  ENABLE_TMR_PARAM_RADIO_READPOWER                              1
+ #define  ENABLE_TMR_PARAM_METADATAFLAG                                 1
+ #define  ENABLE_TMR_PARAM_READ_PLAN                                    1
+ #define  ENABLE_TMR_PARAM_VERSION_SOFTWARE                             1
+ #define  ENABLE_TMR_PARAM_ANTENNA_CHECKPORT                            1
+ #define  ENABLE_TMR_PARAM_PROBEBAUDRATES                               1
+ #define  ENABLE_TMR_PARAM_COMMANDTIMEOUT                               1
+ #define  ENABLE_TMR_PARAM_TRANSPORTTIMEOUT                             1
+ #define  ENABLE_TMR_PARAM_USERMODE                                     1
+ #define  ENABLE_TMR_PARAM_ANTENNA_PORTLIST                             1
+ #define  ENABLE_TMR_PARAM_ANTENNA_CONNECTEDPORTLIST                    1
+ #define  ENABLE_TMR_PARAM_ANTENNA_PORTSWITCHGPOS                       1
+ #define  ENABLE_TMR_PARAM_ANTENNA_SETTLINGTIMELIST                     1
+ #define  ENABLE_TMR_PARAM_ANTENNA_RETURNLOSS                           1
+ #define  ENABLE_TMR_PARAM_ANTENNA_TXRXMAP                              1
+ #define  ENABLE_TMR_PARAM_PER_ANTENNA_TIME                             1
+ #define  ENABLE_TMR_PARAM_GPIO_INPUTLIST_OUTPUTLIST                    1
+ #define  ENABLE_TMR_PARAM_GEN2_ACCESSPASSWORD                          1
+ #define  ENABLE_TMR_PARAM_GEN2_Q                                       1
+ #define  ENABLE_TMR_PARAM_GEN2_TAGENCODING                             1
+ #define  ENABLE_TMR_PARAM_GEN2_SESSION                                 1
+ #define  ENABLE_TMR_PARAM_GEN2_TARGET                                  1
+ #define  ENABLE_TMR_PARAM_GEN2_BLF                                     1
+ #define  ENABLE_TMR_PARAM_GEN2_TARI                                    1
+ #define  ENABLE_TMR_PARAM_GEN2_RFMODE                                  1
+ #define  ENABLE_TMR_PARAM_GEN2_WRITEMODE                               1
+ #define  ENABLE_TMR_PARAM_GEN2_BAP                                     1
+ #define  ENABLE_TMR_PARAM_GEN2_INITIAL_Q                               1
+ #define  ENABLE_TMR_PARAM_GEN2_SEND_SELECT                             1
+ #define  ENABLE_TMR_PARAM_GEN2_PROTOCOLEXTENSION                       1
+ #define  ENABLE_TMR_PARAM_ISO180006B_BLF                               1
+ #define  ENABLE_TMR_PARAM_ISO180006B_MODULATION_DEPTH                  1
+ #define  ENABLE_TMR_PARAM_ISO180006B_DELIMITER                         1
+ #define  ENABLE_TMR_PARAM_READ_ASYNCOFFTIME                            1
+ #define  ENABLE_TMR_PARAM_READ_ASYNCONTIME                             1
+ #define  ENABLE_TMR_PARAM_RADIO_POWERMAX_POWERMIN                      1
+ #define  ENABLE_TMR_PARAM_RADIO_WRITEPOWER                             1
+ #define  ENABLE_TMR_PARAM_RADIO_PORTREADPOWERLIST                      1
+ #define  ENABLE_TMR_PARAM_RADIO_PORTWRITEPOWERLIST                     1
+ #define  ENABLE_TMR_PARAM_RADIO_TEMPERATURE                            1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI                1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA                  1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYDATA                     1
+ #define  ENABLE_TMR_PARAM_TAGOP_ANTENNA                                1
+ #define  ENABLE_TMR_PARAM_TAGOP_PROTOCOL                               1
+ #define  ENABLE_TMR_PARAM_VERSION_HARDWARE                             1
+ #define  ENABLE_TMR_PARAM_VERSION_SERIAL                               1
+ #define  ENABLE_TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS                   1
+ #define  ENABLE_TMR_PARAM_REGION_HOPTABLE                              1
+ #define  ENABLE_TMR_PARAM_REGION_HOPTIME                               1
+ #define  ENABLE_TMR_PARAM_REGION_LBT_ENABLE                            1
+ #define  ENABLE_TMR_PARAM_REGION_DWELL_TIME_ENABLE                     1
+ #define  ENABLE_TMR_PARAM_REGION_LBT_THRESHOLD                         1
+ #define  ENABLE_TMR_PARAM_REGION_DWELL_TIME                            1
+ #define  ENABLE_TMR_PARAM_LICENSE_KEY                                  1
+ #define  ENABLE_TMR_PARAM_USER_CONFIG                                  1
+ #define  ENABLE_TMR_PARAM_RADIO_ENABLESJC                              1
+ #define  ENABLE_TMR_PARAM_READER_STATISTICS                            1
+ #define  ENABLE_TMR_PARAM_READER_STATS                                 1
+ #define  ENABLE_TMR_PARAM_URI                                          1
+ #define  ENABLE_TMR_PARAM_PRODUCT_GROUP_ID                             1
+ #define  ENABLE_TMR_PARAM_PRODUCT_GROUP                                1
+ #define  ENABLE_TMR_PARAM_PRODUCT_ID                                   1
+ #define  ENABLE_TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT                 1
+ #define  ENABLE_TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT                 1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_ENABLEREADFILTER                 1
+ #define  ENABLE_TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT                  1
+ #define  ENABLE_TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT                1
+ #define  ENABLE_TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT              1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT                1
+ #define  ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL                 1
+ #define  ENABLE_TMR_PARAM_READER_DESCRIPTION                           1
+ #define  ENABLE_TMR_PARAM_READER_HOSTNAME                              1
+ #define  ENABLE_TMR_PARAM_CURRENTTIME                                  1
+ #define  ENABLE_TMR_PARAM_READER_WRITE_REPLY_TIMEOUT_EARLY_EXIT        1
+ #define  ENABLE_TMR_PARAM_READER_STATS_ENABLE                          1
+ #define  ENABLE_TMR_PARAM_TRIGGER_READ_GPI                             1
+ #define  ENABLE_TMR_PARAM_GEN2_T4                                      1
+ #define  ENABLE_TMR_PARAM_LICENSED_FEATURES                            1
+ #define  ENABLE_TMR_PARAM_SELECTED_PROTOCOLS                           1
+ #define  ENABLE_TMR_PARAM_REGION_QUANTIZATION_STEP                     1
+ #define  ENABLE_TMR_PARAM_REGION_MINIMUM_FREQUENCY                     1
+ #define  ENABLE_TMR_PARAM_MANAGE_LICENSE_KEY                           1
+ #define  ENABLE_TMR_PARAM_REGULATORY_MODE                              1
+ #define  ENABLE_TMR_PARAM_REGULATORY_MODULATION                        1
+ #define  ENABLE_TMR_PARAM_REGULATORY_ONTIME                            1
+ #define  ENABLE_TMR_PARAM_REGULATORY_OFFTIME                           1
+ #define  ENABLE_TMR_PARAM_REGULATORY_ENABLE                            1
+ #define  ENABLE_TMR_PARAM_ISO14443A_TAGTYPE                            1
+ #define  ENABLE_TMR_PARAM_ISO14443B_TAGTYPE                            1
+ #define  ENABLE_TMR_PARAM_ISO15693_TAGTYPE                             1
+ #define  ENABLE_TMR_PARAM_LF125KHZ_TAGTYPE                             1
+ #define  ENABLE_TMR_PARAM_LF134KHZ_TAGTYPE                             1
+ #define  ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES                 1
+ #define  ENABLE_TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES                 1
+ #define  ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES                  1
+ #define  ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES                  1
+ #define  ENABLE_TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES                  1
+ #define  ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES             1
+ #define  ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES              1
+ #define  ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES              1
+ #define  ENABLE_TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT                    1
+ #define  ENABLE_TMR_PARAM_RADIO_KEEP_RF_ON                             1
+ #define  ENABLE_TMR_PARAM_PROTOCOL_LIST                                1
+
+/* Define this macro to disable non gen2 protocol 
+ * related code to reduce API size
+ */
+#undef TMR_ENABLE_GEN2_ONLY
+
+/* Define the macro to enable 
+ * TMR_ERROR_TAG_ID_BUFFER_AUTH_REQUEST error handling 
+ */
+#define TMR_ENABLE_BUF_AUTH_RQST_ERROR_HANDLIG                          0
+
+/* Define the macro to enable pseudo async read. */
+#define TMR_ENABLE_PSEUDO_ASYNC_READ                                    0
+
+/* Define the macro to enable flush bytes. */
+#define TMR_ENABLE_WAKE_PREAMBLES                                       0
+
+/**
+  Define TMR_ENABLE_CRC for USB interface.
+*/
+#define TMR_ENABLE_CRC                                                  0
+
+/**
+ * Define the macro to enable logical antenna decoding for old firmwares,
+ * where antenna id is returned in form of tx-rx.
+ */
+#define TMR_ENABLE_LOGICAL_ANT_DECODING                                 1
+
+ /**
+  * Define the macro to enable M6e specific code to 
+  * maintain compatibility.
+  */
+#define TMR_ENABLE_M6E_COMPATIBILITY                                    1
 
 /**
  * Define this to enable support for local serial port access via
@@ -54,9 +201,19 @@ extern "C" {
 #define TMR_ENABLE_SERIAL_TRANSPORT_NATIVE
 
 /**
+ * The default baudrate configured on the module.
+ */
+#define TMR_DEFAULT_BAUDRATE 115200
+
+/**
  * The longest possible name for a reader.
  */
 #define TMR_MAX_READER_NAME_LENGTH 64
+
+/**
+ * The longest possible name for a serial port.
+ */
+#define TMR_MAX_SERIAL_DEVICE_NAME_LENGTH TMR_MAX_READER_NAME_LENGTH
 
 /**
  * The maximum number of protocols supported in a multiprotocol search command
@@ -86,6 +243,12 @@ extern "C" {
 #define TMR_MIN_VALUE 0u
 
 /**
+ * Default number of bytes available in the command response.
+ * <Header> + <Cmd length> + <2 bytes - response status> + <2 bytes - CRC>
+ */
+#define TMR_DEF_RESPONSE_CMD_LEN 5
+
+/**
  * Define this to enable support for LLRP readers.
  * (Not yet available for Windows)
  */
@@ -99,6 +262,9 @@ extern "C" {
  */
 #define TMR_LLRP_KEEP_ALIVE_TIMEOUT 5000
 
+/** To build API for baremetal plateform. */
+//#define BARE_METAL
+
 /**
  * Define this to enable async read using single thread
 
@@ -107,9 +273,8 @@ Note:To run readsync_baremetal codelet you have to
 	 Otherwise keep it undefined.
  */
 //#define SINGLE_THREAD_ASYNC_READ
-/**
- * Define this to enable for BARE_METAL API 
- */
+
+
 #ifndef BARE_METAL
 /**
  * Define this to enable support for the GEN2 Custom Tag Operations parameters
@@ -143,7 +308,6 @@ Note:To run readsync_baremetal codelet you have to
 
 #define TMR_ENABLE_BACKGROUND_READS
 
-
 /**
  * Define this to include TMR_strerror().
  */
@@ -160,7 +324,6 @@ Note:To run readsync_baremetal codelet you have to
  * exist in some of the embedded  architectures.
  */
 #define  TMR_ENABLE_STDIO
-  
 
 /**
  * Enabling  this option will enable the support for the parameters defined 
@@ -173,6 +336,11 @@ Note:To run readsync_baremetal codelet you have to
 #endif
 
 #else
+/**
+ * Define this to enable async read using single thread
+ */
+#define SINGLE_THREAD_ASYNC_READ
+
 /**
  * Define this to enable support for the GEN2 Custom Tag Operations parameters
  * and access commands
@@ -202,9 +370,7 @@ Note:To run readsync_baremetal codelet you have to
  * Define this to enable support for background reads using native threads.
  * This feature is also available for windows (using pthreads-win32)
  */
-
 #undef TMR_ENABLE_BACKGROUND_READS
-
 
 /**
  * Define this to include TMR_strerror().
@@ -232,6 +398,10 @@ Note:To run readsync_baremetal codelet you have to
 
 #endif    /*Bare_metal*/
 
+#ifdef TMR_ENABLE_GEN2_ONLY
+#undef TMR_ENABLE_ISO180006B
+#endif /* TMR_ENABLE_GEN2_ONLY */
+
 /**
  * Define when compiling on a big-endian host platform to enable some
  * endian optimizations. Without this, no endianness will be assumed.
@@ -255,6 +425,10 @@ Note:To run readsync_baremetal codelet you have to
  */
 #define TMR_MAX_TRANSPORT_SCHEME_NAME 50
 
+/**
+ * Both UHF and HF/LF module support 
+ * should be enabled by default.
+ */
 #define TMR_ENABLE_ALL
 
 #if (defined(TMR_ENABLE_HF_LF) || (defined(TMR_ENABLE_UHF))) 
@@ -274,7 +448,6 @@ Note:To run readsync_baremetal codelet you have to
 #endif
 
 #if (defined(TMR_ENABLE_HF_LF) && (!defined(TMR_ENABLE_UHF)))
-
   /**
    * To compile for Serial Reader only
    */
@@ -305,6 +478,23 @@ Note:To run readsync_baremetal codelet you have to
 /* M3e does not support antenna multiplexing, so antenna count will always be 2. */
 #define TMR_SR_MAX_ANTENNA_PORTS (2)
 #endif
+
+#ifdef TMR_ENABLE_HF_LF
+
+#define TMR_ENABLE_EXTENDED_TAGOPS 1
+
+#if TMR_ENABLE_EXTENDED_TAGOPS
+/**
+ * Define this to enable support for the DesFire Tag Operations.
+ */
+#define TMR_ENABLE_DESFIRE_TAGOPS 1
+/**
+ * Define this to enable support for the Ultralight NTag Operations.
+ */
+#define TMR_ENABLE_UL_NTAG_TAGOPS 1
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+
+#endif /* TMR_ENABLE_HF_LF */
 
 #ifdef __cplusplus
 }

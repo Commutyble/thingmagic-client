@@ -1,13 +1,13 @@
 /**
  *  @file serial_transport_arduino.c
- *  @brief Mercury API - Sample serial transport that does nothing
+ *  @brief Mercury API - Sample serial transport functions for Arduino
  *  @author Brian Fiegel
  *  @date 11/16/2010
  */
 
 
 /*
- * Copyright (c) 2010 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal

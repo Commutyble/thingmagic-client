@@ -1,0 +1,60 @@
+﻿<UserControl x:Class="ThingMagic.URA2.ucWizardConnectRead"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:models="clr-namespace:ThingMagic.URA2.Models"
+             mc:Ignorable="d" 
+             d:DesignHeight="500" d:DesignWidth="600">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../../Stylesheet/WizardPagesTheme.xaml"/>
+          
+  </ResourceDictionary.MergedDictionaries>
+            <models:ReaderConnectionDetail x:Key="readerconnectionDetails" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid HorizontalAlignment="Center">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Label Grid.Row="0" Grid.Column="0" Margin="3" Grid.ColumnSpan="4" FontWeight="DemiBold" HorizontalContentAlignment="Center" Content="{Binding ReaderDetailContent}" />
+        <Label Grid.Row="1" Grid.Column="0" Margin="3" Content="Name :" FontWeight="DemiBold" HorizontalAlignment="Right"/>
+
+        <Label Grid.Row="2" Grid.Column="0" Margin="5" Content="Reader Type :" FontWeight="DemiBold" HorizontalAlignment="Right"/>
+        <Label Grid.Row="2" Grid.Column="1" Margin="5" Content="{Binding SelectedReaderType}" HorizontalAlignment="Left"/>
+
+        <Label x:Name="lblLastConnected" Grid.Row="3" Grid.Column="0" Margin="5" Content="Last Connected :" FontWeight="DemiBold" HorizontalAlignment="Right" Visibility="{Binding LastConnectedVisibility}"/>
+        <!--<Label Grid.Row="2" Grid.Column="0" Margin="5" Content="Reader Type :" FontWeight="DemiBold" HorizontalAlignment="Right"/>-->
+        <!--<Label Grid.Row="1" Grid.Column="2" Margin="3" Content="Model Name :" FontWeight="DemiBold" HorizontalAlignment="Right"/>-->
+        <!--<Label Grid.Row="3" Grid.Column="0" Margin="3" Grid.ColumnSpan="4" FontWeight="DemiBold" HorizontalContentAlignment="Center" Content="Reader Settings" />-->
+        <Label Grid.Row="4" Grid.Column="0" Margin="3" Content="Region :" FontWeight="DemiBold" HorizontalAlignment="Right"/>
+        <Label Grid.Row="5" Grid.Column="0" Margin="3" Content="Antennas :" FontWeight="DemiBold" HorizontalAlignment="Right"/>
+        <Label Grid.Row="6" Grid.Column="0" Margin="3" Content="Protocols :" FontWeight="DemiBold" HorizontalAlignment="Right"/>
+        <!--<Label Grid.Row="4" Grid.Column="0" Margin="5" Content="Some Other Settings:" HorizontalAlignment="Right"/>-->
+
+        <Label Grid.Row="1" Grid.Column="1" Margin="3" Content="{Binding DetectedReaderName}" />
+        <Label Grid.Row="3" Grid.Column="1" Margin="3" Content="{Binding DetectedReaderLastConnected}" Visibility="{Binding LastConnectedVisibility}"/>
+        <!--<Label Grid.Row="2" Grid.Column="1" Margin="5" Width="150" Content="{Binding DetectedReaderType}" BorderBrush="Black" BorderThickness="0.1"/>-->
+        <!--<Label Grid.Row="1" Grid.Column="3" Margin="3" Content="{Binding DetectedReaderModel}" />-->
+        <Label Grid.Row="4" Grid.Column="1" Margin="3" Content="{Binding DetectedReaderRegion}" />
+        <Label Grid.Row="5" Grid.Column="1" Margin="3" Content="{Binding DetectedSelectedAntenna}" />
+        <Label Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Margin="3" Content="{Binding DetectedReaderProtocol}" />
+        <!--<Label Grid.Row="4" Grid.Column="1" Margin="5" Width="150" Content="Some Other Settings" BorderBrush="Black" BorderThickness="0.1"/>-->
+
+    </Grid>
+</UserControl>

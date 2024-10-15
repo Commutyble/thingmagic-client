@@ -9,7 +9,7 @@
  */
 
  /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -94,7 +94,6 @@ typedef TMR_Status (*TMR_TransportNativeInit)(TMR_SR_SerialTransport *transport,
 void checkForAvailableFeatures(struct TMR_Reader *reader);
 bool versionCompare(uint8_t *readerVersion, uint8_t *checkVersion);
 #ifdef TMR_ENABLE_UHF
-void IsDutyCycleEnabled(TMR_Reader *reader, uint8_t *checkVersion);
 void IsAntennaReadTimeEnabled(struct TMR_Reader *reader, uint8_t *checkVersion);
 void isRegionConfiguration(struct TMR_Reader *reader, uint8_t *checkVersion);
 void checkForAvailableReaderFeatures(struct TMR_Reader *reader);
@@ -167,10 +166,6 @@ typedef enum TMR_Reader_StatsFlag
   TMR_READER_STATS_FLAG_PROTOCOL = (1 << 10),
   /** Current connected antennas */
   TMR_READER_STATS_FLAG_CONNECTED_ANTENNAS = (1 << 11),
-#ifdef TMR_ENABLE_HF_LF
-  /** Current DC input voltage */
-  TMR_READER_STATS_FLAG_DC_VOLTAGE = (1 << 14),
-#endif /* TMR_ENABLE_HF_LF */
 
   /* ALL */
   TMR_READER_STATS_FLAG_ALL = (
@@ -183,9 +178,6 @@ typedef enum TMR_Reader_StatsFlag
                                 TMR_READER_STATS_FLAG_CONNECTED_ANTENNAS |
 #endif /* TMR_ENABLE_UHF */
                                 TMR_READER_STATS_FLAG_TEMPERATURE
-#ifdef TMR_ENABLE_HF_LF
-                                | TMR_READER_STATS_FLAG_DC_VOLTAGE
-#endif /* TMR_ENABLE_HF_LF */
 								)
 }TMR_Reader_StatsFlag;
 
@@ -224,40 +216,13 @@ typedef enum TMR_REGULATORY_Modulation
 typedef enum TMR_Reader_FeaturesFlag
 {
   TMR_READER_FEATURES_FLAG_NONE                                                = 0x00,
-#ifdef TMR_ENABLE_UHF
-  /** Duty cycle feature support flag */
-  TMR_READER_FEATURES_FLAG_DUTY_CYCLE                                          = (1 << 0),
-  /** Multipe select feature support flag */
-  TMR_READER_FEATURES_FLAG_MULTI_SELECT                                        = (1 << 1),
-  /** Antenna read time feature support flag */
-  TMR_READER_FEATURES_FLAG_ANTENNA_READ_TIME                                   = (1 << 2),
-  /** Logical antenna extention(to 64 from 32) feature support flag */
-  TMR_READER_FEATURES_FLAG_EXTENDED_LOGICAL_ANTENNA                            = (1 << 3),
-  /** Flag to check if firmware version supports OPEN region configuration */
-  TMR_READER_FEATURES_FLAG_REGION_CONFIGURATION                                = (1 << 4),
-#endif /* TMR_ENABLE_UHF */
-#ifdef TMR_ENABLE_HF_LF
   /** Address byte extension support flag */
-  TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION                                 = (1 << 5),
-#endif /* TMR_ENABLE_HF_LF */
-  TMR_READER_TOTAL_FEATURES                                                    = 0x06,
+  TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION                                 = (1 << 0),
+  TMR_READER_TOTAL_FEATURES                                                    = 0x01,
 
   /* ALL */
-  TMR_READER_FEATURES_FLAG_ALL = (
-                                  TMR_READER_FEATURES_FLAG_NONE
-#ifdef TMR_ENABLE_UHF
-                                  | TMR_READER_FEATURES_FLAG_DUTY_CYCLE
-                                  | TMR_READER_FEATURES_FLAG_MULTI_SELECT
-                                  | TMR_READER_FEATURES_FLAG_ANTENNA_READ_TIME
-                                  | TMR_READER_FEATURES_FLAG_EXTENDED_LOGICAL_ANTENNA
-                                  | TMR_READER_FEATURES_FLAG_REGION_CONFIGURATION
-#endif
-#ifdef TMR_ENABLE_HF_LF
-                                  | TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION
-#endif /* TMR_ENABLE_HF_LF */
-                                  )
-
-
+  TMR_READER_FEATURES_FLAG_ALL = (TMR_READER_FEATURES_FLAG_NONE
+                                  | TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION)
 }TMR_Reader_FeaturesFlag;
 
 #ifdef TMR_ENABLE_UHF
@@ -294,10 +259,6 @@ typedef struct TMR_Reader_StatsValues
 	TMR_StatsPerAntennaValuesList perAntenna;
 	TMR_StatsPerAntennaValues _perAntStorage[TMR_SR_MAX_ANTENNA_PORTS];
 #endif /* TMR_ENABLE_UHF */
-#ifdef TMR_ENABLE_HF_LF
-    /** DC input voltage */
-    int16_t dcVoltage;
-#endif /* TMR_ENABLE_HF_LF */
 }TMR_Reader_StatsValues;
 
 /** Type of functions to be registered as read callbacks */
@@ -506,27 +467,15 @@ struct TMR_Reader
   bool isStatusResponse;
   /* Option for Trigger Read */
   bool triggerRead;
-  /* Option for Duty cycle*/
-  bool dutyCycle;
   /* Param wait indicator for Reader and protocol param control during continuous read */
-  bool paramWait;
+  volatile bool paramWait;
   /* Param response for Reader and protocol param control during continuous read */
   uint8_t paramMessage[256];
   /* True Continuous Read Start indicator */
   bool hasContinuousReadStarted;
-  /* Does ResetStats feature work on this reader?
-   * Unknown: NULL == pSupportsResetStats
-   * Yes: (NULL != pSupportsResetStats) && (true == *pSupportsResetStats)
-   * No: (NULL != pSupportsResetStats) && (false == *pSupportsResetStats)
-   */
-  bool* pSupportsResetStats/* = NULL*/;
-  bool _storeSupportsResetStats;
   /* Holds asyncofftime of individual read plan, in case of multi read plan*/
   uint32_t subOffTime;
-  /* To fix Bug#5899
-   * Making this flag true for M6e variant modules.
-   * Using it to enable/disable the read filter and to add metadata field in sync read command. */
-  bool isM6eVariant;
+
   union
   {
     TMR_SR_SerialReader serialReader;
@@ -542,14 +491,13 @@ struct TMR_Reader
   bool isStopNTags;
   /* Total tag count for sto N trigger */
   uint32_t numberOfTagsToRead;
+  uint8_t portmask;
 #ifdef TMR_ENABLE_UHF
   TMR_regulatoryParams regulatoryParams;
   /* Option for Fast Search */
   bool fastSearch;
-  uint8_t portmask;
   bool isReadAfterWrite;
   uint8_t extendedAntOption;
-  bool isPerAntTimeSet;
 #endif /* TMR_ENABLE_UHF */
 
 #ifdef TMR_ENABLE_BACKGROUND_READS
@@ -589,13 +537,13 @@ struct TMR_Reader
   TMR_ReadExceptionListenerBlock *readExceptionListeners;
   TMR_StatsListenerBlock *statsListeners;
   TMR_Reader_StatsFlag statsFlag;
-  TMR_Reader_StatsFlag userStatsFlag;
-  TMR_Reader_StatsFlag curStatsFlag;
+  /* Antenna list is one time configuration.
+   * Should not set antenna list if read is performed in loop.
+   */
   bool isAntennaSet;
 #ifdef TMR_ENABLE_UHF
   TMR_SR_StatusType streamStats;
 #endif /* TMR_ENABLE_UHF */
-  TMR_TRD_MetadataFlag allValidMetadataFlags;
   TMR_TRD_MetadataFlag userMetadataFlag;
   TMR_Reader_FeaturesFlag featureFlags;
 
@@ -625,10 +573,10 @@ struct TMR_Reader
                                uint16_t count, uint16_t *data);
   TMR_Status (*writeTagMemBytes)(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                uint32_t bank, uint32_t address,
-                               uint16_t count, const uint8_t data[]);
+                               uint16_t count, const uint8_t data[], TMR_uint8List* response);
   TMR_Status (*writeTagMemWords)(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                uint32_t bank, uint32_t address,
-                               uint16_t count, const uint16_t data[]);
+                               uint16_t count, const uint16_t data[], TMR_uint8List* response);
   TMR_Status (*gpoSet)(struct TMR_Reader *reader, uint8_t count, const TMR_GpioPin state[]);
   TMR_Status (*gpiGet)(struct TMR_Reader *reader, uint8_t *count, TMR_GpioPin state[]);
   TMR_Status (*firmwareLoad)(TMR_Reader *reader, void *cookie, TMR_FirmwareDataProvider provider);
@@ -905,10 +853,11 @@ TMR_Status TMR_readTagMemWords(TMR_Reader *reader, TMR_TagFilter *target,
  * @param byteAddress The byte address to start writing to.
  * @param byteCount The number of bytes to write.
  * @param data The bytes to write.
+ * @param response The response buffer to receive any response data if module sends any i.e., NULL for now as reader doesn't return any response. 
  */
 TMR_Status TMR_writeTagMemBytes(TMR_Reader *reader, TMR_TagFilter *target,
                                 uint32_t bank, uint32_t byteAddress,
-                                uint16_t byteCount, const uint8_t data[]);
+                                uint16_t byteCount, const uint8_t data[], TMR_uint8List* response);
 
 /**
  * @deprecated This method is deprecated
@@ -923,10 +872,11 @@ TMR_Status TMR_writeTagMemBytes(TMR_Reader *reader, TMR_TagFilter *target,
  * @param wordAddress The word address to start writing to.
  * @param wordCount The number of words to write.
  * @param data The words to write.
+ * @param response The response buffer to receive any response data if module sends any i.e., NULL for now as reader doesn't return any response.
  */
 TMR_Status TMR_writeTagMemWords(TMR_Reader *reader, TMR_TagFilter *target,
                                 uint32_t bank, uint32_t wordAddress,
-                                uint16_t wordCount, const uint16_t data[]);
+                                uint16_t wordCount, const uint16_t data[], TMR_uint8List* response);
 
 #endif /* TMR_ENABLE_UHF */
 /**
@@ -1071,13 +1021,13 @@ TMR_Status TMR_resetHoptable(struct TMR_Reader *reader);
  * @li /reader/commandTimeout
  * @li /reader/currentTime
  * @li /reader/description
- * @li /reader/extendedEpc
  * @li /reader/gen2/BLF
  * @li /reader/gen2/accessPassword
  * @li /reader/gen2/bap
  * @li /reader/gen2/initQ
  * @li /reader/gen2/protocolExtension
  * @li /reader/gen2/q
+ * @li /reader/gen2/rfMode
  * @li /reader/gen2/sendSelect
  * @li /reader/gen2/session
  * @li /reader/gen2/t4
@@ -1117,7 +1067,6 @@ TMR_Status TMR_resetHoptable(struct TMR_Reader *reader);
  * @li /reader/probeBaudRates
  * @li /reader/protocolList
  * @li /reader/radio/KeepRFOn
- * @li /reader/radio/enablePowerSave
  * @li /reader/radio/enableSJC
  * @li /reader/radio/portReadPowerList
  * @li /reader/radio/portWritePowerList
@@ -1157,7 +1106,6 @@ TMR_Status TMR_resetHoptable(struct TMR_Reader *reader);
  * @li /reader/tagReadData/enableReadFilter
  * @li /reader/tagReadData/readFilterTimeout
  * @li /reader/tagReadData/recordHighestRssi
- * @li /reader/tagReadData/reportRssiInDbm
  * @li /reader/tagReadData/tagopFailures
  * @li /reader/tagReadData/tagopSuccesses
  * @li /reader/tagReadData/uniqueByAntenna
@@ -1450,9 +1398,6 @@ TMR_Status TMR_loadConfig(struct TMR_Reader *reader, char *filePath);
  * @param filePath  save reader configurations from filepath.
  */
 TMR_Status TMR_saveConfig(struct TMR_Reader *reader, char *filePath);
-#ifdef TMR_ENABLE_UHF
-TMR_Status isAntDetectEnabled(struct TMR_Reader *reader, uint8_t *antennaList);
-#endif /* TMR_ENABLE_UHF */
 
 #ifndef DOXYGEN_IGNORE
 
@@ -1460,12 +1405,14 @@ TMR_Status TMR_reader_init_internal(struct TMR_Reader *reader);
 /*TMR_Status TMR_init_statusListenerBlock(TMR_StatusListenerBlock *slb, TMR_StatusListener listener,
                                         void *cookie, TMR_SR_StatusContentFlags statusFlags);*/
 TMR_Status validateReadPlan(TMR_Reader *reader, TMR_ReadPlan *plan, TMR_AntennaMapList *txRxMap, uint32_t protocols);
-
+void notify_read_listeners(TMR_Reader* reader, TMR_TagReadData* trd);
+void notify_stats_listeners(TMR_Reader* reader, TMR_Reader_StatsValues* stats);
 void TMR__notifyTransportListeners(TMR_Reader *reader, bool tx, 
                                    uint32_t dataLen, uint8_t *data,
                                    int timeout);
 
 void notify_exception_listeners(TMR_Reader *reader, TMR_Status status);
+void reset_continuous_reading(struct TMR_Reader* reader);
 void cleanup_background_threads(TMR_Reader *reader);
 
 #ifdef TMR_ENABLE_SERIAL_READER_ONLY
@@ -1480,8 +1427,8 @@ void cleanup_background_threads(TMR_Reader *reader);
 #define TMR_writeTag(reader, filter, data) (TMR_SR_writeTag((reader),(filter),(data)))
 #define TMR_readTagMemWords(reader, target, bank, address, count, data) (TMR_SR_readTagMemWords((reader),(target),(bank),(address),(count),(data)))
 #define TMR_readTagMemBytes(reader, target, bank, address, count, data) (TMR_SR_readTagMemBytes((reader),(target),(bank),(address),(count),(data)))
-#define TMR_writeTagMemWords(reader, target, bank, address, count, data) (TMR_SR_writeTagMemWords((reader),(target),(bank),(address),(count),(data)))
-#define TMR_writeTagMemBytes(reader, target, bank, address, count, data) (TMR_SR_writeTagMemBytes((reader),(target),(bank),(address),(count),(data)))
+#define TMR_writeTagMemWords(reader, target, bank, address, count, data, response) (TMR_SR_writeTagMemWords((reader),(target),(bank),(address),(count),(data),(response))
+#define TMR_writeTagMemBytes(reader, target, bank, address, count, data, response) (TMR_SR_writeTagMemBytes((reader),(target),(bank),(address),(count),(data),(response)))
 #define TMR_killTag(reader, filter, auth) (TMR_SR_killTag((reader),(filter),(auth)))
 #define TMR_lockTag(reader, filter, action) (TMR_SR_lockTag((reader),(filter),(action)))
 #endif /* TMR_ENABLE_UHF */
@@ -1505,8 +1452,8 @@ void cleanup_background_threads(TMR_Reader *reader);
 #define TMR_writeTag(reader, filter, data) ((reader)->writeTag((reader),(filter),(data)))
 #define TMR_readTagMemWords(reader, target, bank, address, count, data) ((reader)->readTagMemWords((reader),(target),(bank),(address),(count),(data)))
 #define TMR_readTagMemBytes(reader, target, bank, address, count, data) ((reader)->readTagMemBytes((reader),(target),(bank),(address),(count),(data)))
-#define TMR_writeTagMemWords(reader, target, bank, address, count, data) ((reader)->writeTagMemWords((reader),(target),(bank),(address),(count),(data)))
-#define TMR_writeTagMemBytes(reader, target, bank, address, count, data) ((reader)->writeTagMemBytes((reader),(target),(bank),(address),(count),(data)))
+#define TMR_writeTagMemWords(reader, target, bank, address, count, data, response) ((reader)->writeTagMemWords((reader),(target),(bank),(address),(count),(data),(response)))
+#define TMR_writeTagMemBytes(reader, target, bank, address, count, data, response) ((reader)->writeTagMemBytes((reader),(target),(bank),(address),(count),(data),(response)))
 #define TMR_killTag(reader, filter, auth) ((reader)->killTag((reader),(filter),(auth)))
 #define TMR_lockTag(reader, filter, action) ((reader)->lockTag((reader),(filter),(action)))
 #define TMR_executeTagOp(reader, tagop, filter, data) ((reader)->executeTagOp((reader), (tagop), (filter), (data)))
@@ -1542,6 +1489,12 @@ TMR_SR_convertFromEBV(uint8_t *msg, uint8_t length);
 void 
 TMR_getTimeStamp(struct TMR_Reader *rp, const struct TMR_TagReadData *read, char *timeString);
 
+void
+TMR_getReadMemoryErrors(int8_t memError);
+
+TMR_Status
+TMR_flush(struct TMR_Reader *rp);
+void* TMR_idleHandler(void *arg);
 #ifdef  __cplusplus
 }
 #endif

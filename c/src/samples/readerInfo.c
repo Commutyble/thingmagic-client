@@ -1,8 +1,8 @@
 /**
  * Sample program that display reader parameters
- * @file readerinfo.c
+ * @file readerInfo.c
  */
-
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,7 +98,34 @@ int main(int argc, char *argv[])
 #endif
 
   ret = TMR_connect(rp);
-  checkerr(rp, ret, 1, "connecting reader");
+  /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+   * The connection may fail if the module is configured to a different baud rate. If
+   * that is the case, the MercuryAPI tries connecting to the module with other supported
+   * baud rates until the connection is successful using baud rate probing mechanism.
+   */
+  if((ret == TMR_ERROR_TIMEOUT) && 
+     (TMR_READER_TYPE_SERIAL == rp->readerType))
+  {
+    uint32_t currentBaudRate;
+
+    /* Start probing mechanism. */
+    ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+    checkerr(rp, ret, 1, "Probe the baudrate");
+
+    /* Set the current baudrate, so that 
+     * next TMR_Connect() call can use this baudrate to connect.
+     */
+    ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+    checkerr(rp, ret, 1, "Setting baudrate"); 
+
+    /* Connect using current baudrate */
+    ret = TMR_connect(rp);
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
+  else
+  {
+    checkerr(rp, ret, 1, "Connecting reader");
+  }
 
   model.value = string;
   model.max   = sizeof(string);

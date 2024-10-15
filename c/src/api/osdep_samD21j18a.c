@@ -9,7 +9,15 @@
 #include "osdep.h"
 #include "conf_clocks.h"
 
-uint32_t msec=0;
+uint64_t msec=0;
+static uint8_t  timerSts = 0xFF;
+
+uint8_t start_sysTickTimer(void)
+{
+    // Configure SysTick to generate an interrupt every millisecond
+    timerSts = SysTick_Config(system_gclk_gen_get_hz(GCLK_GENERATOR_0)/1000);
+    return timerSts;
+}
 
 void 
 SysTick_Handler(void)
@@ -20,13 +28,7 @@ SysTick_Handler(void)
 uint64_t 
 tmr_gettime(void)
 {
-	uint32_t ret;
-	ret=SysTick_Config(SystemCoreClock/1000);                                    /* Configure SysTick to generate an interrupt every millisecond */
-	if(ret==0)
-	{
-		return msec;
-	}
-	return 0;
+  return msec;
 }
 
 uint32_t 

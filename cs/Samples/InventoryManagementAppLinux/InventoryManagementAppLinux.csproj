@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <OutputPath>../../Linux/</OutputPath>
+    <TargetFramework>net5.0</TargetFramework>
+    <AssemblyName>InventoryManagementApp</AssemblyName>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PreserveCompilationContext>false</PreserveCompilationContext>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="InventoryManagementApp.cs" />	  
+    <Compile Update="Properties/AssemblyInfo.cs" />	  
+    <Reference Include="MercuryAPI">
+	    <HintPath>../../Linux/MercuryAPI.dll</HintPath>
+    </Reference>
+    <Reference Include="InventoryManagementAPI">
+            <HintPath>../../Linux/InventoryManagementAPI.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+       <PackageReference Include="System.IO.Ports" Version="6.0.0.0" IsImplicitlyDefined="true" />  
+  </ItemGroup>
+
+ <Target Name="Aftercc" AfterTargets="Build">
+          <Exec Command="rm -rf ../../Linux/runtimes/" />
+          <Exec Command="rm -rf ../../Linux/refs/" />
+          <Exec Command="rm -rf ../../Linux/ref/" />
+          <Exec Command="rm -rf ../../Linux/*.pdb" />
+          <Exec Command="rm -rf ../../Linux/System.Security.*.dll" />
+          <Exec Command="rm -rf ../../Linux/System.Windows.*.dll" />
+          <Exec Command="rm -rf ../../Linux/System.Drawing.*.dll" />
+          <Exec Command="rm -rf ../../Linux/Microsoft.Win32.*.dll" />
+  </Target>
+
+</Project>

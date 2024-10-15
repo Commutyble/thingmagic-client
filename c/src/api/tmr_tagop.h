@@ -8,7 +8,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -205,17 +205,17 @@ typedef enum TMR_TagOpType
 
 #ifdef TMR_ENABLE_UHF
 /** The type of Gen2 Secure operation  */
-typedef enum SecureTagType
+typedef enum TMR_SecureTagType
 {
   GEN2_EMBEDDED_SECURE_DEFAULT = 0x00,
   /* Alien Higgs 3 secure access */
   GEN2_EMBEDDED_SECURE_HIGGS3_ACCESS   = (1 << 1),
   /* Monza 4 secure access */
   GEN2_EMBEDDED_SECURE_MONZA4_ACCESS   = (1 << 2)
-}SecureTagType;
+}TMR_SecureTagType;
  
 /* The type of Gen2 IAVDenatranCmdEnum */
-typedef enum IAVDenatranSecureTagOpType
+typedef enum TMR_IAVDenatranSecureTagOpType
 {
   /* Activate Secure Mode - PA Protocol */
   GEN2_ACTIVATE_SECURE_MODE  = 0x00,
@@ -243,19 +243,19 @@ typedef enum IAVDenatranSecureTagOpType
   GEN2_WRITE_SEC = 0x0B,
   /* Pa G0 - (PA + G0) Protocol */
   GEN2_PA_G0_AUTHENTICATE = 0x0C,
-}IAVDenatranSecureTagOpType;
+}TMR_IAVDenatranSecureTagOpType;
 
 /* The type of Gen2 secure password  */
-typedef enum SecurePasswordType
+typedef enum TMR_SecurePasswordType
 {
   /* Gen2 password type */
   TMR_SECURE_GEN2_PASSWORD = 0x01,
   /* Look up table password */
   TMR_SECURE_GEN2_LOOKUP_TABLE_PASSWORD = 0x02
-}SecurePasswordType;
+}TMR_SecurePasswordType;
 
 /* The fild type of calibration data that user can modify */
-typedef enum CalibrationParameter
+typedef enum TMR_SL900A_CalibrationParameter
 {
   /* AD1 lower voltage reference - coarse */
   TMR_GEN2_IDS_SL900A_CALIBRATION_COARSE1,
@@ -275,10 +275,10 @@ typedef enum CalibrationParameter
   TMR_GEN2_IDS_SL900A_CALIBRATION_IRLEV,
   /* Excitate for resistive sensors without DC */
   TMR_GEN2_IDS_SL900A_CALIBRATION_EXCRES,
-}CalibrationParameter;
+}TMR_SL900A_CalibrationParameter;
 
 /* The field type of sfe parameters that user can modify */
-typedef enum SfeParameter
+typedef enum TMR_SL900A_SfeParameter
 {
   /* External sensor 2 range */
   TMR_GEN2_IDS_SL900A_SFE_RANG,
@@ -292,7 +292,7 @@ typedef enum SfeParameter
   TMR_GEN2_IDS_SL900A_SFE_AUTORANGEDISABLE,
   /* Sensor used in limit check */
   TMR_GEN2_IDS_SL900A_SFE_VERIFYSENSORID,
-}SfeParameter;
+}TMR_SL900A_SfeParameter;
 
 typedef struct TMR_TagOp_GEN2_NXP_Tam1Authentication
 {
@@ -386,7 +386,7 @@ typedef struct TMR_TagOp_GEN2_ReadData
 /** Parameters of Gen2 Secure operation */
 
 /* Parameters of SecurePassWordLookup Table */
-typedef struct SecurePasswordLookup
+typedef struct TMR_SecurePasswordLookup
 {
   /* used in case Gen2 passWord */
   TMR_TagAuthentication gen2PassWord;
@@ -398,7 +398,7 @@ typedef struct SecurePasswordLookup
   uint8_t secureAddressOffset;
   /*  User flash offset, starting from 0x0000 (LSB 2 bytes) */
    uint16_t secureFlashOffset;
-} SecurePasswordLookup;
+} TMR_SecurePasswordLookup;
 
 typedef struct TMR_TagOp_GEN2_SecureReadData
 {
@@ -407,11 +407,11 @@ typedef struct TMR_TagOp_GEN2_SecureReadData
 
   /** type of Gen2 Secure operation*/
   /* Options to select Alien Higgs 3 secure access and Monza 4 secure access */
-  SecureTagType type;
+  TMR_SecureTagType type;
   /* option to select Gen2 password or look up table password */
-  SecurePasswordType passwordType;
+  TMR_SecurePasswordType passwordType;
   /* Options to specify the password */
-  SecurePasswordLookup password;
+  TMR_SecurePasswordLookup password;
  } TMR_TagOp_GEN2_SecureReadData;
 
 /** Parameters of a Gen2 memory write operation */
@@ -660,7 +660,7 @@ typedef struct TMR_TagOp_GEN2_Impinj_Monza6_MarginRead
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Activate_Secure_Mode
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_Activate_Secure_Mode;
@@ -669,7 +669,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_Activate_Secure_Mode
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Authenticate_OBU
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_Authenticate_OBU;
@@ -678,7 +678,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_Authenticate_OBU
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Activate_Siniav_Mode
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
   /* token desc */
@@ -691,7 +691,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_Activate_Siniav_Mode
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_ID
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_ID;
@@ -700,7 +700,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_ID
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass1
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass1;
@@ -709,7 +709,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass1
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass2
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass2;
@@ -718,7 +718,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass2
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_ReadFromMemMap
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
   /* address to be read from USER bank */
@@ -729,7 +729,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_ReadFromMemMap
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Read_Sec
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
   /* address to be read from USER bank */
@@ -740,7 +740,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_Read_Sec
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_WriteToMemMap
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
   /* Pointer to the USER data */
@@ -757,7 +757,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_WriteToMemMap
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Write_Sec
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
   /* data words */
@@ -770,14 +770,14 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_Write_Sec
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_Get_Token_Id
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
 }TMR_TagOp_GEN2_Denatran_IAV_Get_Token_Id;
 
 /** Parameters for IAV, Authenticate OBU Full Pass */
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass;
@@ -786,7 +786,7 @@ typedef struct TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass
 typedef struct TMR_TagOp_GEN2_Denatran_IAV_G0_PA_OBU_Auth_ID
 {
   /* Enum for IAV tagoperation */
-  IAVDenatranSecureTagOpType mode;
+  TMR_IAVDenatranSecureTagOpType mode;
   /* RFU field */
   uint8_t payload;
 }TMR_TagOp_GEN2_Denatran_IAV_G0_PA_OBU_Auth_ID;
@@ -944,13 +944,13 @@ typedef enum LoggingForm
 }LoggingForm;
 
 /** SL900A Data log memory-full behavior */
-typedef enum DelayMode
+typedef enum TMR_SL900A_DelayMode
 {
   /* Start logging after delay time */
   TMR_GEN2_IDS_SL900A_DELAYMODE_TIMER = 0x00,
   /* Start logging on external input */
   TMR_GEN2_IDS_SL900A_DELAYMODE_EXTSWITCH = 0x01,
-}DelayMode;
+}TMR_SL900A_DelayMode;
 
 /** SL900A Logging memory-full behavior */
 typedef enum StorageRule
@@ -971,7 +971,7 @@ typedef enum BatteryType
 }BatteryType;
 
 /** Sub-Class for Raw 9 or 21-bit Get Log State reply */
-typedef struct LimitCounter
+typedef struct TMR_SL900A_LimitCounter
 {
   /* Number of times selected sensor has gone beyond extreme lower limit */
   uint8_t extremeLower;
@@ -981,7 +981,7 @@ typedef struct LimitCounter
   uint8_t upper;
   /* Number of times selected sensor has gone beyond extreme upper limit */
   uint8_t extremeUpper;
-}LimitCounter;
+}TMR_SL900A_LimitCounter;
 
 /** Sub-Class for  specifying 40 bit LogLimits Value */
 typedef struct LogLimits
@@ -997,7 +997,7 @@ typedef struct LogLimits
 }LogLimits;
 
 /** Sub-class for SystemStatus reply object */
-typedef struct SystemStatus
+typedef struct TMR_SL900A_SystemStatus
 {
   /* Measurement Address Pointer */
   uint16_t MeasurementAddressPointer;
@@ -1007,10 +1007,10 @@ typedef struct SystemStatus
   uint16_t NumMeasurements;
   /* Active */
   bool Active;
-}SystemStatus;
+}TMR_SL900A_SystemStatus;
 
 /** Sub-Class for Log Status Flags */
-typedef struct StatusFlags
+typedef struct TMR_SL900A_StatusFlags
 {
   /* Logging active */
   bool Active;
@@ -1028,16 +1028,16 @@ typedef struct StatusFlags
   bool ShelfLifeHigh;
   /* ShelfLifeExpired */
   bool ShelfLifeExpired;
-}StatusFlags;
+}TMR_SL900A_StatusFlags;
 /** Sub-class for get log state value reply */
 typedef struct TMR_TagOp_GEN2_IDS_SL900A_LogState
 {
   /* Number of excursions beyond set limits */
-  LimitCounter limitCount;
+  TMR_SL900A_LimitCounter limitCount;
   /* Logging system status */
-  SystemStatus statStatus;
+  TMR_SL900A_SystemStatus statStatus;
   /* Logging status flags */
-  StatusFlags  statFlag;
+  TMR_SL900A_StatusFlags  statFlag;
 }TMR_TagOp_GEN2_IDS_SL900A_LogState;
 
 /** Sub-Class for Get Sensor Value reply */
@@ -1069,7 +1069,7 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_BatteryLevelReading
 }TMR_TagOp_GEN2_IDS_SL900A_BatteryLevelReading;
 
 /** Sub-class for  SL900A  Log Mode Data */
-typedef struct LogModeData
+typedef struct TMR_SL900A_LogModeData
 {
   /* Raw 8-bit response from Measurement Setup Data command */
   uint8_t Raw;
@@ -1085,7 +1085,7 @@ typedef struct LogModeData
   bool TempEnable;
   /* Enable log for battery sensor */
   bool BattEnable;
-}LogModeData;
+}TMR_SL900A_LogModeData;
 
 /** Sub-class for Calibration Data */
 typedef struct TMR_TagOp_GEN2_IDS_SL900A_CalibrationData
@@ -1125,7 +1125,7 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_CalibrationData
   /*  Reserved for Future Use */
   uint8_t RFU;
   /* Specifyes the field user can modify */
-  CalibrationParameter type;
+  TMR_SL900A_CalibrationParameter type;
 }TMR_TagOp_GEN2_IDS_SL900A_CalibrationData;
 
 /** Sub-class to specify Sensor Front End Parameters */
@@ -1162,7 +1162,7 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_SfeParameters
    */
   uint8_t VerifySensorID;
   /* specifies the type of field user want to modufy */
-  SfeParameter type;
+  TMR_SL900A_SfeParameter type;
 }TMR_TagOp_GEN2_IDS_SL900A_SfeParameters;
 
 /** Sub-Class to Combination Calibration Data / SFE Parameters object */
@@ -1175,13 +1175,13 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_CalSfe
 }TMR_TagOp_GEN2_IDS_SL900A_CalSfe;
 
 /**Sub-Class to spcify fifo source */
-typedef enum FifoSource
+typedef enum TMR_SL900A_FifoSource
 {
   /* Data from SPI */
   TMR_GEN2_IDS_SL900A_FIFOSOURCE_SPI = 0x00,
   /* Data from RFID */
   TMR_GEN2_IDS_SL900A_FIFOSOURCE_RFID = 0x01,
-}FifoSource;
+}TMR_SL900A_FifoSource;
 /** Sub-Class for Get status fifo reply */
 typedef struct TMR_TagOp_GEN2_IDS_SL900A_FifoStatus
 {
@@ -1194,13 +1194,13 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_FifoStatus
   /* No Data bit */
   bool noData;
   /* Data Source bit (SPI, RFID) */
-  FifoSource source;
+  TMR_SL900A_FifoSource source;
   /* Number of valid bytes in FIFO register */
   uint8_t numValidBytes;
 }TMR_TagOp_GEN2_IDS_SL900A_FifoStatus;
 
 /** Sub-Class for specifying SL900A application data */
-typedef struct ApplicationData
+typedef struct TMR_SL900A_ApplicationData
 {
   /* Raw 16-bit protocol value */
   uint16_t raw;
@@ -1208,7 +1208,7 @@ typedef struct ApplicationData
   uint16_t NumberOfWords;
   /* Broken word pointer */
   uint8_t BrokenWordPointer;
-}ApplicationData;
+}TMR_SL900A_ApplicationData;
 
 /** Sub-Class for Gen2 Ids Sl900A coustom tag extension */
 typedef struct TMR_TagOP_GEN2_IDS_SL900A
@@ -1220,7 +1220,7 @@ typedef struct TMR_TagOP_GEN2_IDS_SL900A
   /* Data log format selection */
   LoggingForm dataLog;
   /* Data log memory-full behavior */
-  DelayMode mode;
+  TMR_SL900A_DelayMode mode;
   /* Logging memory-full behavior */
   StorageRule rule;
 }TMR_TagOP_GEN2_IDS_SL900A;
@@ -1284,17 +1284,17 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_EndLog
 }TMR_TagOp_GEN2_IDS_SL900A_EndLog;
 
 /** Sub-Class for DelayTime */
-typedef struct Delay
+typedef struct TMR_SL900A_Delay
 {
   /* Raw 16-bit protocol value */
   uint16_t raw;
   /* Logging start mode */
-  DelayMode Mode;
+  TMR_SL900A_DelayMode Mode;
   /* Logging timer delay value (units of 512 seconds) */
   uint16_t Time;
   /* Trigger log on both timer and external interrupts */
   bool IrqTimerEnable;
-}Delay;
+}TMR_SL900A_Delay;
 
 /** Sub-Classs for ShelfLife Block 0 */
 typedef struct TMR_TagOp_GEN2_IDS_SL900A_ShelfLifeBlock0
@@ -1338,11 +1338,11 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_MeasurementSetupData
   /* LogLimits Data */
   LogLimits loglimit;
   /* Log Mode Data */
-  LogModeData logModeData;
+  TMR_SL900A_LogModeData logModeData;
   /* Delay Data */
-  Delay delyTime;
+  TMR_SL900A_Delay delyTime;
   /* Application Data */
-  ApplicationData addData;
+  TMR_SL900A_ApplicationData addData;
   /* Time (seconds) between log readings */
   uint16_t logInterval;
   /* Start Time */
@@ -1354,7 +1354,7 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_Initialize
 {
   TMR_TagOP_GEN2_IDS_SL900A sl900A;
   /* Logging memory configuration */
-  ApplicationData applicationData;
+  TMR_SL900A_ApplicationData applicationData;
   /* Custom Command Code */
   uint8_t CommandCode;
   /* Gen2 access password */
@@ -1362,7 +1362,7 @@ typedef struct TMR_TagOp_GEN2_IDS_SL900A_Initialize
   /* IDS SL900A Password */
   uint32_t Password;
   /* Delay time */
-  Delay delayTime;
+  TMR_SL900A_Delay delayTime;
 }TMR_TagOp_GEN2_IDS_SL900A_Initialize;
 
 /** Sub-Class for specifying AccessFifo operation*/
@@ -1804,11 +1804,45 @@ typedef struct TMR_TagOp_GEN2
 /** Types of memory operations */
 typedef enum TMR_Memory_Type
 {
-  TMR_TAGOP_BLOCK_MEMORY = 0x21,                    // Both read and write are supported.
-  TMR_TAGOP_BLOCK_SYSTEM_INFORMATION_MEMORY = 0x22, // Only read is supported.
-  TMR_TAGOP_BLOCK_PROTECTION_STATUS_MEMORY = 0x23,  // Only read is supported.
-  TMR_TAGOP_SECURE_ID = 0x24,                       // Only read is supported.
+  TMR_TAGOP_TAG_MEMORY                 = 0x21, // Both read and write are supported.
+  TMR_TAGOP_TAG_INFO                   = 0x22, // Only read is supported.
+  TMR_TAGOP_PROTECTION_SECURITY_STATUS = 0x23, // Only read is supported.
+  TMR_TAGOP_SECURE_ID                  = 0x24, // Only read is supported.
+  TMR_TAGOP_EXT_TAG_MEMORY             = 0x25, // API enum used for extended tag Operations.
 }TMR_Memory_Type;
+
+#if TMR_ENABLE_DESFIRE_TAGOPS
+/** DesFire commands for read/write operations */
+typedef enum TMR_DesFire_Cmd
+{
+  TMR_TAGOP_DESFIRE_CMD_NONE          = 0x00,
+  TMR_TAGOP_DESFIRE_CMD_READ          = 0x01,
+  TMR_TAGOP_DESFIRE_CMD_WRITE         = 0x01,
+  TMR_TAGOP_DESFIRE_CMD_APP_ID        = 0x02,
+  TMR_TAGOP_DESFIRE_CMD_FILE_ID       = 0x03,
+  TMR_TAGOP_DESFIRE_CMD_AUTHENTICATE  = 0x04,
+  TMR_TAGOP_DESFIRE_CMD_DELETE_APP    = 0x05,
+  TMR_TAGOP_DESFIRE_CMD_FORMAT        = 0x06,
+  TMR_TAGOP_DESFIRE_CMD_CHANGE_KEY    = 0x07,
+  TMR_TAGOP_DESFIRE_CMD_KEY_SETTINGS  = 0x08,
+  TMR_TAGOP_DESFIRE_CMD_FILE_SETTINGS = 0x09,
+  TMR_TAGOP_DESFIRE_CMD_DELETE_FILE   = 0x0A,
+  TMR_TAGOP_DESFIRE_CMD_KEY_VERSION   = 0x0B,
+
+  TMR_TAGOP_DESFIRE_CMD_MAX    = TMR_TAGOP_DESFIRE_CMD_KEY_VERSION + 1,
+}TMR_DesFire_Cmd;
+
+/** DesFire File-types for read/write operations */
+typedef enum TMR_DesFire_FileType
+{
+  TMR_TAGOP_DESFIRE_FILE_TYPE_STDDATA        = 0x00,
+  TMR_TAGOP_DESFIRE_FILE_TYPE_BACKUPDATA     = 0x01,
+  TMR_TAGOP_DESFIRE_FILE_TYPE_VALUE          = 0x02,
+  TMR_TAGOP_DESFIRE_FILE_TYPE_LINEAR_RECORD  = 0x03,
+  TMR_TAGOP_DESFIRE_FILE_TYPE_CYCLIC_RECORD  = 0x04
+
+}TMR_DesFire_FileType;
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
 
 /** Read memory structure */
 typedef struct TMR_TagOp_ReadMemory
@@ -1842,6 +1876,124 @@ typedef struct TMR_TagOp_PassThrough
   TMR_uint8List buffer; 
 } TMR_TagOp_PassThrough;
 
+#define MAX_PASSWORD_LEN  0x18
+
+#if TMR_ENABLE_DESFIRE_TAGOPS
+#define APPID_LEN         0x03
+
+/** Read memory structure */
+typedef struct TMR_TagOp_DesFire_ReadData
+{
+  /** Application ID to read from */
+  uint32_t appId;
+  /** Sub option to read */
+  uint8_t subCmd;
+  /** File ID to read from*/
+  uint8_t fileId;
+  /** File Type to be read */
+  uint8_t fileType;
+  /** Key Number */
+  uint8_t keyNo;
+} TMR_TagOp_DesFire_ReadData;
+
+/** Write memory structure */
+typedef struct TMR_TagOp_DesFire_WriteData
+{
+  /** Application ID to write into */
+  uint32_t appId;
+  /** Size of a file */
+  uint16_t fileSize;
+  /** Access rights of a file */
+  uint16_t accessRights;
+  /** Sub cmd to write */
+  uint8_t subCmd;
+  /** File ID to write into*/
+  uint8_t fileId;
+  /** File Type to be written */
+  uint8_t fileType;
+  /** Key settings */
+  uint8_t keySettings;
+  /** Number Of Keys */
+  uint8_t numKeys;
+  /** Key number */
+  uint8_t keyNo;
+  /** New key number */
+  uint8_t newKeyNo;
+} TMR_TagOp_DesFire_WriteData;
+
+/** Sub-class for DesFire standard tagops */
+typedef struct TMR_TagOp_DesFire
+{
+  union
+  {
+    TMR_TagOp_DesFire_ReadData readData;
+    TMR_TagOp_DesFire_WriteData writeData;
+  } u;
+}TMR_TagOp_DesFire;
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+
+#if TMR_ENABLE_UL_NTAG_TAGOPS
+
+/** DesFire commands for read/write operations */
+typedef enum TMR_UL_Ntag_Cmd
+{
+  TMR_TAGOP_UL_NTAG_CMD_NONE         = 0x00,
+  TMR_TAGOP_UL_NTAG_CMD_FAST_READ    = 0x01,
+  TMR_TAGOP_UL_NTAG_CMD_READ         = 0x02,
+  TMR_TAGOP_UL_NTAG_CMD_WRITE        = 0x02,
+  TMR_TAGOP_UL_NTAG_CMD_GET_VERSION  = 0x03,
+
+  TMR_TAGOP_UL_NTAG_CMD_MAX          = TMR_TAGOP_UL_NTAG_CMD_GET_VERSION + 1,
+}TMR_UL_Ntag_Cmd;
+
+/** Read memory structure */
+typedef struct TMR_TagOp_UL_Ntag_ReadData
+{
+  /** Sub option to read */
+  uint8_t subCmd;
+} TMR_TagOp_UL_Ntag_ReadData;
+
+/** Read memory structure */
+typedef struct TMR_TagOp_UL_Ntag_WriteData
+{
+  /** Sub option to write */
+  uint8_t subCmd;
+} TMR_TagOp_UL_Ntag_WriteData;
+
+/** Sub-class for Ultralight Ntag standard tagops */
+typedef struct TMR_TagOp_UL_Ntag
+{
+  union
+  {
+    TMR_TagOp_UL_Ntag_ReadData readData;
+    TMR_TagOp_UL_Ntag_WriteData writeData;
+  } u;
+}TMR_TagOp_UL_Ntag;
+#endif /* TMR_ENABLE_UL_NTAG_TAGOPS */
+
+typedef struct TMR_ExtTagOp
+{
+  uint64_t tagType;
+  TMR_uint8List *accessPassword;
+
+  /* Standard tag operations */
+  TMR_TagOp_ReadMemory readMem;
+  TMR_TagOp_WriteMemory writeMem;
+
+#if TMR_ENABLE_EXTENDED_TAGOPS
+  /* Extended tag operations */
+  union
+  {
+#if TMR_ENABLE_DESFIRE_TAGOPS
+    TMR_TagOp_DesFire desfire;
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+
+#if TMR_ENABLE_UL_NTAG_TAGOPS
+    TMR_TagOp_UL_Ntag ulNtag;
+#endif /* TMR_ENABLE_UL_NTAG_TAGOPS */
+  } u;
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+}TMR_ExtTagOp;
 #endif /* TMR_ENABLE_HF_LF */
 
 /** Tag operation data structure */
@@ -1857,8 +2009,7 @@ struct TMR_TagOp
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_HF_LF
     /* HF protocol supported tag operations */
-    TMR_TagOp_ReadMemory readMem;
-    TMR_TagOp_WriteMemory writeMem;
+    TMR_ExtTagOp extTagOp;
     TMR_TagOp_PassThrough passThrough;
 #endif /* TMR_ENABLE_HF_LF */
   } u;
@@ -2091,6 +2242,8 @@ TMR_TagOp_init_WriteMemory(TMR_TagOp *tagop, TMR_Memory_Type memType, uint32_t a
 TMR_Status
 TMR_TagOp_init_PassThrough(TMR_TagOp *tagop, uint32_t timeout,
                              uint32_t configFlags, TMR_uint8List *buffer);
+TMR_Status
+TMR_set_accessPassword(TMR_TagOp *tagop, TMR_uint8List *accessPW);
 #endif /* TMR_ENABLE_HF_LF */
 
 #ifdef __cplusplus

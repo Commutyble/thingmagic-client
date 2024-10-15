@@ -1,4 +1,4 @@
-/**
+/*
  * Sample program that reads tags for a fixed period of time (500ms)
  * and prints the tags found.
  * @file read.c
@@ -399,27 +399,6 @@ int main(int argc, char * argv[]) {
 
   }
 
-    #ifdef TMR_ENABLE_UHF
-    /**
-     * Checking the software version of the sargas.
-     * The antenna detection is supported on sargas from software version of 5.3.x.x.
-     * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-     * User has to pass the antenna as arguments.
-     */
-    {
-      ret = isAntDetectEnabled(rp, antennaList);
-      if (TMR_ERROR_UNSUPPORTED == ret) {
-        #ifndef BARE_METAL
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-        #endif
-      } else {
-        #ifndef BARE_METAL
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-        #endif
-      }
-    }
-    #endif /* TMR_ENABLE_UHF */
   } else {
     if (antennaList != NULL) {
       #ifndef BARE_METAL
@@ -533,7 +512,6 @@ int main(int argc, char * argv[]) {
       uint8_t dataBuf2[258];
       uint8_t dataBuf3[258];
       uint8_t dataBuf4[258];
-      char epcStr[128];
 
       ret = TMR_TRD_init_data( & trd, sizeof(dataBuf) / sizeof(uint8_t), dataBuf);
       checkerr(rp, ret, 1, "creating tag read data");
@@ -572,16 +550,19 @@ int main(int argc, char * argv[]) {
       } else {
         hasTid = 0;
       }
-
       #ifndef BARE_METAL
       TMR_getTimeStamp(rp, & trd, timeStr);
       printf("%s Tag ID: %s ", timeStr, idStr);
-
       if (0 < trd.data.len)
       {
-        char dataStr[255];
-        TMR_bytesToHex(trd.data.list, trd.data.len, dataStr);
-        printf("DATA(%d): %s ", trd.data.len, dataStr);
+        char dataStr[2048];
+        if (trd.data.len < 512) {
+          TMR_bytesToHex(trd.data.list, trd.data.len, dataStr);
+          printf("DATA(%d): %s ", trd.data.len, dataStr);
+        }
+        else {
+          printf("Not printing data too long: %d\n", trd.data.len);
+        }
       }
 
       // Enable PRINT_TAG_METADATA Flags to print Metadata value
@@ -619,8 +600,11 @@ int main(int argc, char * argv[]) {
               if (0 < trd.data.len) {
                 #ifdef TMR_ENABLE_HF_LF
                 if (0x8000 == trd.data.len) {
-                  ret = TMR_translateErrorCode(GETU16AT(trd.data.list, 0));
-                  checkerr(rp, ret, 0, "Embedded tagOp failed:");
+                  // This happsens sometimes.  We want to go on. -dgy
+                  printf("Error Embedded tagOp failed:: Bit decoding failed.  Continuing...");
+                  continue;
+                  //ret = TMR_translateErrorCode(GETU16AT(trd.data.list, 0));
+                  //checkerr(rp, ret, 0, "Embedded tagOp failed:");
                 } 
                 else
                 #endif /* TMR_ENABLE_HF_LF */ 

@@ -12,9 +12,7 @@
 #ifndef WIN32
 #include <string.h>
 #endif
-#ifdef TMR_ENABLE_HF_LF
 #include <tmr_utils.h>
-#endif /* TMR_ENABLE_HF_LF */
 
 /* Enable this to enable ReadAfterWrite feature */
 #ifndef ENABLE_READ_AFTER_WRITE
@@ -32,6 +30,7 @@
 #define ENABLE_SYSTEM_INFORMATION_MEMORY 0
 #define ENABLE_BLOCK_PROTECTION_STATUS   0
 #define ENABLE_SECURE_ID_EMBEDDED_READ   0
+#define ENABLE_SET_ACCESS_PASSWORD       0
 #endif /* TMR_ENABLE_HF_LF */
 
 
@@ -113,7 +112,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -124,8 +127,6 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
   }
   *antennaCount = i;
 }
-
-bool isModelM3e = false;
 
 #ifdef TMR_ENABLE_HF_LF
 #if ENABLE_SYSTEM_INFORMATION_MEMORY
@@ -278,25 +279,18 @@ void ReadTags(TMR_Reader* rp)
 
     if (0 < trd.data.len)
     {
-#ifdef TMR_ENABLE_HF_LF
       if (0x8000 == trd.data.len)
       {
         ret = TMR_translateErrorCode(GETU16AT(trd.data.list, 0));
         checkerr(rp, ret, 0, "Embedded tagOp failed:");
       }
       else
-#endif /* TMR_ENABLE_HF_LF */
       {
         char dataStr[512];
-        uint32_t dataLen = trd.data.len;
-
-        if(isModelM3e)
-        {
-          dataLen = tm_u8s_per_bits(trd.data.len);
-        }
+        uint8_t dataLen = (trd.data.len / 8);
 
         TMR_bytesToHex(trd.data.list, dataLen, dataStr);
-        printf("Data(%d): %s\n", trd.data.len, dataStr);
+        printf("Data(%d): %s\n", dataLen, dataStr);
       }
     }
   }
@@ -390,12 +384,6 @@ int main(int argc, char *argv[])
   TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
   checkerr(rp, ret, 1, "Getting version model");
 
-  //Enable "isModelM3e" flag if module is M3e.
-  if (0 == strcmp("M3e", model.value))
-  {
-    isModelM3e = true;
-  }
-
   if (0 != strcmp("M3e", model.value))
   {
     region = TMR_REGION_NONE;
@@ -423,25 +411,6 @@ int main(int argc, char *argv[])
     }
 
 #ifdef TMR_ENABLE_UHF
-    /**
-     * Checking the software version of the sargas.
-     * The antenna detection is supported on sargas from software version of 5.3.x.x.
-     * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-     * User has to pass the antenna as arguments.
-     */
-    {
-      ret = isAntDetectEnabled(rp, antennaList);
-      if(TMR_ERROR_UNSUPPORTED == ret)
-      {
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-      }
-      else
-      {
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-      }
-    }
-
   //Use first antenna for operation
   if (NULL != antennaList)
   {
@@ -510,16 +479,11 @@ int main(int argc, char *argv[])
     TMR_uint16List writeArgs;
     char dataStr[128];
     TMR_ReadPlan plan;
-
 #if ENABLE_FILTER
-    {
-      uint8_t mask[2];
-      /* This select filter matches all Gen2 tags where bits 32-48 of the EPC are 0xABAB */
+    uint8_t mask[2] = {0xAB, 0xAB};
 
-      mask[0] = 0xAB;
-      mask[1] = 0xAB;
-      TMR_TF_init_gen2_select(pfilter, false, TMR_GEN2_BANK_EPC, 32, 16, mask);
-    }
+    /* This select filter matches all Gen2 tags where bits 32-48 of the EPC are 0xABAB */
+    TMR_TF_init_gen2_select(pfilter, false, TMR_GEN2_BANK_EPC, 32, 16, mask);
 #else
     pfilter = NULL;
 #endif
@@ -636,7 +600,8 @@ int main(int argc, char *argv[])
     TMR_TagReadData trd;
     char epcStr[128];
     TMR_TagOp writeop, readop;
-    uint8_t address, dataLen;
+    uint32_t address;
+    uint8_t dataLen;
     TMR_uint8List data;
     TMR_uint8List response;
     uint8_t responseData[255];
@@ -646,12 +611,6 @@ int main(int argc, char *argv[])
 #endif /* ENABLE_FILTER */
     TMR_TagFilter filter, *pfilter = &filter;
     uint8_t writeData[] = { 0x11, 0x22, 0x33, 0x44};
-
-    if (antennaList != NULL)
-    {
-      printf("Module doesn't support antenna input\n");
-      usage();
-    }
     
      /* Read Plan */
      // initialize the read plan
@@ -683,6 +642,7 @@ int main(int argc, char *argv[])
 
       TMR_bytesToHex(trd.tag.epc, trd.tag.epcByteCount, epcStr); 
       printf("UID: %s\n", epcStr); 
+      printf("TagType: 0x%08lx\n", (long unsigned int)trd.tagType);
     }
 
 #if ENABLE_FILTER
@@ -716,8 +676,24 @@ int main(int argc, char *argv[])
     printf("\nRead the existing data before performing write\n");
 
     //  Initialize the read memory tagOp
-    ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_BLOCK_MEMORY, address, dataLen);
+    ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_TAG_MEMORY, address, dataLen);
     checkerr(rp, ret, 1, "creating read memory tagop");
+
+    // Enable and set the password before execute tag op
+#if ENABLE_SET_ACCESS_PASSWORD
+    {
+      TMR_uint8List *pAccessPW, accessPW;
+      uint8_t key[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+
+      accessPW.list = key;
+      accessPW.len  = accessPW.max = sizeof(key) / sizeof(key[0]);
+      pAccessPW     = &accessPW;
+    
+      //Set password
+      ret = TMR_set_accessPassword(&readop, pAccessPW);
+      checkerr(rp, ret, 1, "setting access password");
+	}
+#endif
 
     // Perform the read memory standalone tag operation 
     ret = TMR_executeTagOp(rp, &readop, pfilter, &response);
@@ -739,7 +715,7 @@ int main(int argc, char *argv[])
     data.max = data.len = sizeof(writeData) / sizeof(writeData[0]);
 
     //  Initialize the write memory tagOp
-    ret = TMR_TagOp_init_WriteMemory(&writeop, TMR_TAGOP_BLOCK_MEMORY, address, &data);
+    ret = TMR_TagOp_init_WriteMemory(&writeop, TMR_TAGOP_TAG_MEMORY, address, &data);
     checkerr(rp, ret, 1, "creating write memory tagop");
 
     // Perform the write memory standalone tag operation 
@@ -750,7 +726,7 @@ int main(int argc, char *argv[])
     printf("\nVerify the written data in the writeMemory operation\n");
 
     //  Initialize the read memory tagOp
-    ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_BLOCK_MEMORY, address, dataLen);
+    ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_TAG_MEMORY, address, dataLen);
     checkerr(rp, ret, 1, "creating read memory tagop");
 
     // Perform the read memory standalone tag operation 
@@ -781,11 +757,16 @@ int main(int argc, char *argv[])
 #define CONFIGURATION_BLOCK_ADDRESS 0
 #define CONFIGURATION_BLOCK_NUM 0
       //  Initialize the read memory tagOp
-      ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_BLOCK_SYSTEM_INFORMATION_MEMORY, 
+      ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_TAG_INFO,
                                       CONFIGURATION_BLOCK_ADDRESS, CONFIGURATION_BLOCK_NUM);
       checkerr(rp, ret, 1, "creating system information tagop");
 
       // Perform the read memory standalone tag operation
+      /* Make sure to provide enough response buffer - 'response.list'
+       * If the provided response buffer size is less than the number
+       * of bytes requested to read, then the operation will result in
+       * TMR_ERROR_OUT_OF_MEMORY error.
+       */
       ret = TMR_executeTagOp(rp, &readop, pfilter, &response);
       checkerr(rp, ret, 1, "executing system information tagop");
 
@@ -804,7 +785,7 @@ int main(int argc, char *argv[])
       dataLen = 1;
 
       //  Initialize the read memory tagOp
-      ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_BLOCK_PROTECTION_STATUS_MEMORY, address, dataLen);
+      ret = TMR_TagOp_init_ReadMemory(&readop, TMR_TAGOP_PROTECTION_SECURITY_STATUS, address, dataLen);
       checkerr(rp, ret, 1, "creating Get block protection status tagop");
 
       // Perform the read memory standalone tag operation

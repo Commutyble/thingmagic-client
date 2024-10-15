@@ -92,7 +92,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
 	while(NULL != token)
 	{
+#ifdef WIN32
+		scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
 		scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
 		if (1 != scans)
 		{
 			fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -259,24 +263,6 @@ int main(int argc, char *argv[])
 		checkerr(rp, ret, 1, "setting region");  
 	}
 
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-    {
-      ret = isAntDetectEnabled(rp, antennaList);
-      if(TMR_ERROR_UNSUPPORTED == ret)
-      {
-        fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-        usage();
-      }
-      else
-      {
-        checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-      }
-    }
   //Use first antenna for operation
   if (NULL != antennaList)
   {
@@ -411,12 +397,18 @@ int main(int argc, char *argv[])
               performEmbeddedTagOperation(rp, &plan, &newtagop, NULL);*/
 
 			//Uncomment this to enable Authenticate with TAM2 with key1
+
+			/*Note- TMR_NXP_Profile name is changed from 'EPC' to 'TMR_NXP_Profile_EPC'
+			 * as part of Bug#8976 fix (Because of the conflicting macro name "EPC".
+			 * It's the name of an ESP32 register, so we shouldn't use it without a unique prefix).
+			 */
+
 			/*key.list = key1;
 			key.max = key.len = sizeof(key1) / sizeof(key1[0]);
 
 			// supported protMode value is 1 for NXPUCODE AES
 			 protMode = 1;
-			ret = TMR_TagOp_init_GEN2_NXP_AES_Tam2authentication(&tam2, KEY1, &key, EPC, Offset, BlockCount, protMode, SendRawData);
+			ret = TMR_TagOp_init_GEN2_NXP_AES_Tam2authentication(&tam2, KEY1, &key, TMR_NXP_Profile_EPC, Offset, BlockCount, protMode, SendRawData);
 			checkerr(rp, ret, 1, "initializing Tam1 authentication");
 
 			authenticate.type = TAM2_AUTHENTICATION;
@@ -505,8 +497,13 @@ int main(int argc, char *argv[])
 
 				// Authenticate with TAM2 with key0
 				//supported protMode values are 0,1,2,3.
+
+				/*Note- TMR_NXP_Profile name is changed from 'EPC' to 'TMR_NXP_Profile_EPC'
+				 * as part of Bug#8976 fix (Because of the conflicting macro name "EPC".  
+				 * It's the name of an ESP32 register, so we shouldn't use it without a unique prefix).
+				 */
 				protMode = 0;
-				ret = TMR_TagOp_init_GEN2_NXP_AES_Tam2authentication(&tam2, KEY0, &key, EPC, Offset, BlockCount, protMode, SendRawData);
+				ret = TMR_TagOp_init_GEN2_NXP_AES_Tam2authentication(&tam2, KEY0, &key, TMR_NXP_Profile_EPC, Offset, BlockCount, protMode, SendRawData);
 				checkerr(rp, ret, 1, "initializing Tam1 authentication");
 
 				authenticate.type = TAM2_AUTHENTICATION;

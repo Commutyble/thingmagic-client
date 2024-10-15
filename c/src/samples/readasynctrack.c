@@ -19,11 +19,14 @@
 #define USE_TRANSPORT_LISTENER 0
 #endif
 
+static int uniqueCount=0; 
+static int totalCount=0;
+
 #define usage() {errx(1, "Please provide valid reader URL, such as: reader-uri [--ant n]\n"\
                          "reader-uri : e.g., 'tmr:///COM1' or 'tmr:///dev/ttyS0/' or 'tmr://readerIP'\n"\
                          "[--ant n] : e.g., '--ant 1'\n"\
                          "Example: 'tmr:///com4' or 'tmr:///com4 --ant 1,2' \n");}
-#ifdef TMR_ENABLE_UHF
+
 typedef struct tagdb_table
 {
   char *epc;
@@ -152,7 +155,6 @@ void db_free(tag_database *db)
   free(db->table);
   free(db);
 }
-#endif /* TMR_ENABLE_UHF */
 
 
 void errx(int exitval, const char *fmt, ...)
@@ -220,7 +222,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -248,15 +254,15 @@ int main(int argc, char *argv[])
   TMR_Reader r, *rp;
   TMR_Status ret;
   TMR_Region region;
-#ifdef TMR_ENABLE_UHF
   TMR_ReadPlan plan;
   TMR_ReadListenerBlock rlb;
   TMR_ReadExceptionListenerBlock reb;
-#endif /* TMR_ENABLE_UHF */
   uint8_t *antennaList = NULL;
   uint8_t buffer[20];
   uint8_t i;
   uint8_t antennaCount = 0x0;
+  TMR_String model;
+  char string[100];
  #if USE_TRANSPORT_LISTENER
   TMR_TransportListenerBlock tb;
 #endif
@@ -330,35 +336,29 @@ int main(int argc, char *argv[])
     ret = TMR_paramSet(rp, TMR_PARAM_REGION_ID, &region);
     checkerr(rp, ret, 1, "setting region");  
   }
-#ifdef TMR_ENABLE_UHF
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments.
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
+
+  model.value = string;
+  model.max   = sizeof(string);
+  TMR_paramGet(rp, TMR_PARAM_VERSION_MODEL, &model);
+  checkerr(rp, ret, 1, "Getting version model");
+
   /**
   * for antenna configuration we need two parameters
   * 1. antennaCount : specifies the no of antennas should
   *    be included in the read plan, out of the provided antenna list.
   * 2. antennaList  : specifies  a list of antennas for the read plan.
-  **/ 
+  **/
 
   // initialize the read plan 
-  ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_GEN2, 1000);
-  checkerr(rp, ret, 1, "initializing the  read plan");
+  if (0 != strcmp("M3e", model.value))
+  {
+    ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_GEN2, 1000);
+  }
+  else
+  {
+    ret = TMR_RP_init_simple(&plan, antennaCount, antennaList, TMR_TAG_PROTOCOL_ISO14443A, 1000);
+  }
+  checkerr(rp, ret, 1, "initializing the read plan");
 
   /* Commit read plan */
   ret = TMR_paramSet(rp, TMR_PARAM_READ_PLAN, &plan);
@@ -390,22 +390,21 @@ int main(int argc, char *argv[])
   ret = TMR_stopReading(rp);
   checkerr(rp, ret, 1, "stopping reading");
 
+  printf("Unique Tags: %d Total Tags: %d\n", uniqueCount,totalCount);
+
   ret = TMR_removeReadListener(rp, &rlb);
   db_free(seenTags);
-#endif /* TMR_ENABLE_UHF */
+
   TMR_destroy(rp);
   return 0;
 
 #endif /* TMR_ENABLE_BACKGROUND_READS */
 }
 
-#ifdef TMR_ENABLE_UHF
 void
 callback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
 {
   char epcStr[128];
-  static int uniqueCount, totalCount;
-
   TMR_bytesToHex(t->tag.epc, t->tag.epcByteCount, epcStr);
   /**
    * If the tag is not present in the database, only then 
@@ -415,8 +414,9 @@ callback(TMR_Reader *reader, const TMR_TagReadData *t, void *cookie)
   {   
     db_insert(seenTags, epcStr);
     uniqueCount ++;
+    printf("New tag: %s\n", epcStr);
   }  
-  printf("Background read: %s, total tags seen = %d, unique tags seen = %d\n", epcStr, ++totalCount, uniqueCount);
+  totalCount ++;
 }
 
 void
@@ -424,4 +424,3 @@ exceptionCallback(TMR_Reader *reader, TMR_Status error, void *cookie)
 {
   fprintf(stdout, "Error:%s\n", TMR_strerr(reader, error));
 }
-#endif /* TMR_ENABLE_UHF */

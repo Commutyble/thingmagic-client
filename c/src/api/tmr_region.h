@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -69,7 +69,7 @@ typedef enum TMR_Region
   /** Hong Kong **/                 TMR_REGION_HK = 28,
   /** Bangladesh **/                TMR_REGION_BD = 29,
   /** European Union 4 
-      4 channels (916.3MHz, 
+      3 channels (916.3MHz, 
       917.5MHz,
       918.7MHz)**/        TMR_REGION_EU4 = 30,
   /** Universal region 

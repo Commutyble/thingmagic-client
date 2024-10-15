@@ -7,7 +7,7 @@
 
 
 /*
- * Copyright (c) 2016 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,6 @@
 #include "tm_reader.h"
 #include "STM32F10x.h"
 
-
 /*** MAX_TX_BUFFER_LENGTH Must be a power of 2 (2,4,8,16,32,64,128,256,512,...) ***/
 #define MAX_TX_BUFFER_LENGTH   256
 #define TBUFLEN ((uint32_t)((tbuf.head < tbuf.tail) ? ((MAX_TX_BUFFER_LENGTH- tbuf.tail)+tbuf.head):(tbuf.head - tbuf.tail)))
@@ -40,50 +39,48 @@
 #define MAX_RX_BUFFER_LENGTH   256
 #define RBUFLEN ((uint32_t)((rbuf.head < rbuf.tail) ? ((MAX_RX_BUFFER_LENGTH- rbuf.tail)+rbuf.head):(rbuf.head - rbuf.tail)))
 
-/*
-*Circular Buffer Structure
-*/
-typedef struct buf_st {
-    volatile uint32_t head;                      /* Next In Index  */
-    uint32_t tail;                               /* Next Out Index */
-    volatile char buffer [MAX_RX_BUFFER_LENGTH]; /* Buffer         */
+/* Circular Buffer Structure */
+typedef struct buf_st
+{
+  volatile uint32_t head;                      /* Next In Index  */
+  uint32_t tail;                               /* Next Out Index */
+  volatile char buffer [MAX_RX_BUFFER_LENGTH]; /* Buffer         */
 }circBuf_t;
 
 circBuf_t rbuf,tbuf;
 
-/************************Circular Buffer length validation*********************************************/  
+/************************Circular Buffer length validation*********************************************/
 
 #if MAX_TX_BUFFER_LENGTH < 2
-#error MAX_TX_BUFFER_LENGTH is too small.  It must be larger than 1.
+#error MAX_TX_BUFFER_LENGTH is too small. It must be larger than 1.
 #elif ((MAX_TX_BUFFER_LENGTH & (MAX_TX_BUFFER_LENGTH-1)) != 0)
 #error MAX_TX_BUFFER_LENGTH must be a power of 2.
 #endif
 
-
 #if MAX_RX_BUFFER_LENGTH < 2
-#error MAX_RX_BUFFER_LENGTH is too small.  It must be larger than 1.
+#error MAX_RX_BUFFER_LENGTH is too small. It must be larger than 1.
 #elif ((MAX_RX_BUFFER_LENGTH & (MAX_RX_BUFFER_LENGTH-1)) != 0)
 #error MAX_RX_BUFFER_LENGTH must be a power of 2.
 #endif
-/*********************************************************************/  
+/*********************************************************************/
 
-static unsigned int tx_restart = 1;             /* NZ if TX restart is required     */
+/* NZ if TX restart is required */
+static unsigned int tx_restart = 1;
 
+/********** USART1_IRQHandler Handles USART1 global interrupt request. ***********/
 
-/********** USART1_IRQHandler Handles USART1 global interrupt request. ***********/ 
-
-void USART1_IRQHandler (void) 
+void USART1_IRQHandler (void)
 {
   volatile unsigned int IIR;
-	uint32_t next;
+  uint32_t next;
   uint8_t receiveByte;
   uint32_t sendByte;
 
   IIR = USART1->SR;
-  if (IIR & USART_SR_RXNE)                      /* read interrupt  */ 
-  {        
-    USART1->SR &= ~USART_SR_RXNE;               /* clear interrupt */        
-  
+  if (IIR & USART_SR_RXNE)                      /* read interrupt */
+  {
+    USART1->SR &= ~USART_SR_RXNE;               /* clear interrupt */
+
     receiveByte = (USART1->DR & 0x1FF);
     next= rbuf.head + 1;
     next &= (MAX_RX_BUFFER_LENGTH-1);
@@ -93,55 +90,59 @@ void USART1_IRQHandler (void)
       rbuf.buffer[rbuf.head] = receiveByte;
       rbuf.head = next;
     }
-   }  
-  
+  }
+
   if (IIR & USART_SR_TXE)                       /* read interrupt  */
-	{
-    USART1->SR &= ~USART_SR_TXE;                /* clear interrupt  */
-      if (tbuf.head != tbuf.tail)
-      {	
-			  sendByte =(tbuf.buffer[tbuf.tail] & 0x1FF);
-	      USART1->DR  =sendByte ;
-        next = tbuf.tail + 1;
-	      next &= (MAX_TX_BUFFER_LENGTH-1);
-	      tbuf.tail = next;
-      }	
-		  else 
-      {
-        tx_restart = 1;
-        USART1->CR1 &= ~USART_SR_TXE;           /* disable TX IRQ if nothing to send */
-      }
-		}
+  {
+    USART1->SR &= ~USART_SR_TXE;                /* clear interrupt */
+    if (tbuf.head != tbuf.tail)
+    {
+      sendByte =(tbuf.buffer[tbuf.tail] & 0x1FF);
+      USART1->DR  =sendByte ;
+      next = tbuf.tail + 1;
+      next &= (MAX_TX_BUFFER_LENGTH-1);
+      tbuf.tail = next;
+    }
+    else 
+    {
+      tx_restart = 1;
+      USART1->CR1 &= ~USART_SR_TXE;            /* disable TX IRQ if nothing to send */
+    }
+  }
 }
 
-/****************** SendChar:Sends a character ****************/  
+/****************** SendChar:Sends a character ****************/
 int SendChar (int c) 
 {
-	if (TBUFLEN >= MAX_TX_BUFFER_LENGTH)          /* If the buffer is full            */
-  return (-1);                                  /* return an error value            */
+  if (TBUFLEN >= MAX_TX_BUFFER_LENGTH)          /* If the buffer is full            */
+  {
+    return (-1);                                  /* return an error value            */
+  }
 
-	tbuf.buffer[tbuf.head] = c;
-  tbuf.head +=1;
-  
-	if(tbuf.head == MAX_TX_BUFFER_LENGTH)
-	tbuf.head = 0;	
+  tbuf.buffer[tbuf.head] = c;
+  tbuf.head += 1;
+
+  if(tbuf.head == MAX_TX_BUFFER_LENGTH)
+  {
+    tbuf.head = 0;
+  }
 
   if(tx_restart)                                /* If TX interrupt is disabled   */
   {                          
     tx_restart = 0;                             /* enable it                     */
     USART1->CR1 |= USART_SR_TXE;                /* enable TX interrupt           */
-  } 
-	
+  }
+
   return (0);
 }
 
 
-/****************** Stub implementation of serial transport layer routines. ****************/  
+/****************** Stub implementation of serial transport layer routines. ****************/
 static TMR_Status
 s_open(TMR_SR_SerialTransport *this)
 {
   int i;
-	
+
   /* Initialize the Tx circular buffer structure */
   tbuf.head = 0;
   tbuf.tail = 0;
@@ -149,7 +150,7 @@ s_open(TMR_SR_SerialTransport *this)
   {
     tbuf.buffer[i] = 0;
   }
-	
+
   /* Initialize the Rx circular buffer structure */
   rbuf.head = 0;
   rbuf.tail = 0;
@@ -181,7 +182,7 @@ s_open(TMR_SR_SerialTransport *this)
   NVIC_EnableIRQ(USART1_IRQn);
   USART1->CR1  |= ((   1UL << 13) );            /* enable USART                     */
 
-    return TMR_SUCCESS;
+  return TMR_SUCCESS;
 }
 
   
@@ -201,6 +202,7 @@ s_sendBytes(TMR_SR_SerialTransport *this, uint32_t length,
   {
     SendChar(message[i]);
   }
+
   return TMR_SUCCESS;
 }
 
@@ -220,15 +222,15 @@ uint32_t* messageLength, uint8_t* message, const uint32_t timeoutMs)
   {
     uint32_t next;
 
-	while (rbuf.head == rbuf.tail);             /*If no data in circular buffer then wait for data*/
+    while (rbuf.head == rbuf.tail);             /*If no data in circular buffer then wait for data*/
     if (rbuf.head != rbuf.tail)
-    {	
-	  message[index] = rbuf.buffer[rbuf.tail];
+    {
+      message[index] = rbuf.buffer[rbuf.tail];
       next = rbuf.tail + 1;
-	  next &= (MAX_RX_BUFFER_LENGTH-1);
-	  rbuf.tail = next;
-    }	
-	index++;
+      next &= (MAX_RX_BUFFER_LENGTH-1);
+      rbuf.tail = next;
+    }
+    index++;
   }
   *messageLength = index;
 
@@ -243,7 +245,6 @@ s_setBaudRate(TMR_SR_SerialTransport *this, uint32_t rate)
   * not supported.
   */
   USART1->BRR   = 72000000 / (long) rate;       /* 115200 baud @ PCLK2 72MHz */
-
   return TMR_SUCCESS;
 }
 

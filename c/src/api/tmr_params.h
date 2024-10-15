@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -65,15 +65,17 @@ typedef enum TMR_Param
   TMR_PARAM_ANTENNA_PORTLIST,
   /** "/reader/antenna/connectedPortList", TMR_uint8List  */
   TMR_PARAM_ANTENNA_CONNECTEDPORTLIST,
-#ifdef TMR_ENABLE_UHF
   /** "/reader/antenna/portSwitchGpos", TMR_uint8List  */
   TMR_PARAM_ANTENNA_PORTSWITCHGPOS,
+#ifdef TMR_ENABLE_UHF
   /** "/reader/antenna/settlingTimeList", TMR_PortValueList  */
   TMR_PARAM_ANTENNA_SETTLINGTIMELIST,
   /** "/reader/antenna/returnLoss", TMR_PortValueList */
   TMR_PARAM_ANTENNA_RETURNLOSS,
+#endif /* TMR_ENABLE_UHF */
   /** "/reader/antenna/txRxMap", TMR_AntennaMapList  */
   TMR_PARAM_ANTENNA_TXRXMAP,
+#ifdef TMR_ENABLE_UHF
   /** "/reader/antenna/perAntennaTime", TMR_PortValueList  */
   TMR_PARAM_PER_ANTENNA_TIME,
 #endif /* TMR_ENABLE_UHF */
@@ -96,6 +98,8 @@ typedef enum TMR_Param
   TMR_PARAM_GEN2_BLF,
   /** "/reader/gen2/tari", TMR_GEN2_Tari */
   TMR_PARAM_GEN2_TARI,
+  /** "/reader/gen2/rfMode", TMR_GEN2_RFMode */
+  TMR_PARAM_GEN2_RFMODE,
   /**"/reader/gen2/writeMode", TMR_GEN2_WriteMode*/
   TMR_PARAM_GEN2_WRITEMODE,
   /** "/reader/gen2/bap", TMR_GEN2_Bap */
@@ -119,10 +123,6 @@ typedef enum TMR_Param
   TMR_PARAM_READ_ASYNCONTIME,
   /** "/reader/read/plan", TMR_ReadPlan */
   TMR_PARAM_READ_PLAN,
-#ifdef TMR_ENABLE_UHF
-  /** "/reader/radio/enablePowerSave", bool */
-  TMR_PARAM_RADIO_ENABLEPOWERSAVE,
-#endif /* TMR_ENABLE_UHF */
   /** "/reader/radio/powerMax", int16_t */
   TMR_PARAM_RADIO_POWERMAX,
   /** "/reader/radio/powerMin", int16_t */
@@ -142,8 +142,6 @@ typedef enum TMR_Param
 #ifdef TMR_ENABLE_UHF
   /** "/reader/tagReadData/recordHighestRssi", bool */
   TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI,
-  /** "/reader/tagReadData/reportRssiInDbm", bool */
-  TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM,
   /** "/reader/tagReadData/uniqueByAntenna", bool */
   TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA,
   /** "/reader/tagReadData/uniqueByData", bool */
@@ -180,7 +178,7 @@ typedef enum TMR_Param
   TMR_PARAM_REGION_DWELL_TIME_ENABLE,
   /** "/reader/region/lbtThreshold", uint8_t */
   TMR_PARAM_REGION_LBT_THRESHOLD,
-  /** "/reader/region/dwellTime", uint32_t */
+  /** "/reader/region/dwellTime", uint16_t */
   TMR_PARAM_REGION_DWELL_TIME,
 #endif /* TMR_ENABLE_UHF */
   /** "/reader/licenseKey", TMR_uint8List */
@@ -190,8 +188,6 @@ typedef enum TMR_Param
 #ifdef TMR_ENABLE_UHF
   /** "/reader/radio/enableSJC", bool */
   TMR_PARAM_RADIO_ENABLESJC,
-  /** "/reader/extendedEpc", bool */
-  TMR_PARAM_EXTENDEDEPC,
   /** "/reader/statistics", TMR_SR_ReaderStatistics */
   TMR_PARAM_READER_STATISTICS,
 #endif /* TMR_ENABLE_UHF */

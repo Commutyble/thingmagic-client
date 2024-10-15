@@ -1,0 +1,236 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_height="wrap_content"
+    android:layout_margin="3dip"
+	android:layout_width="fill_parent"
+    android:background="@drawable/table_style"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="3dip"
+        android:background="@drawable/table_style"
+        android:orientation="horizontal"
+        android:padding="3dp">
+
+        <TextView
+            android:id="@+id/AntennasToSearchOn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.40"
+            android:paddingLeft="5dp"
+            android:text="Antennas: "
+            android:textSize="15dp" />
+
+        <CheckBox
+            android:id="@+id/antCheckBox1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="4dp"
+            android:layout_weight="1"
+            android:checked="false"
+            android:visibility="invisible"
+            android:text="1" />
+
+        <CheckBox
+            android:id="@+id/antCheckBox2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="false"
+            android:visibility="invisible"
+            android:text="2" />
+
+        <CheckBox
+            android:id="@+id/antCheckBox3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="false"
+            android:visibility="invisible"
+            android:text="3" />
+
+        <CheckBox
+            android:id="@+id/antCheckBox4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:checked="false"
+            android:visibility="invisible"
+            android:text="4" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="3dip"
+        android:background="@drawable/table_style"
+        android:orientation="horizontal"
+        android:padding="5dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.40"
+            android:gravity="left"
+            android:text="@string/ReadTime" />
+
+        <EditText
+            android:id="@+id/read_time_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="20dp"
+            android:layout_weight="0.60"
+            android:background="@drawable/edit_text_style"
+            android:gravity="left"
+            android:inputType="time"
+            android:maxLength="5"
+            android:paddingLeft="5dp"
+            android:text="@string/DefaultTime" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="3dip"
+        android:background="@drawable/table_style"
+        android:orientation="horizontal"
+        android:padding="5dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.40"
+            android:gravity="left"
+            android:text="Read Power (dBm):" />
+
+        <EditText
+            android:id="@+id/read_power_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="20dp"
+            android:layout_weight="0.60"
+            android:background="@drawable/edit_text_style"
+            android:gravity="left"
+            android:inputType="numberDecimal|numberSigned"
+            android:maxLength="5"
+            android:paddingLeft="5dp"
+            android:text="0" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="3dip"
+        android:background="@drawable/table_style"
+        android:orientation="horizontal"
+        android:padding="5dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.40"
+            android:gravity="left"
+            android:text="Write Power (dBm):" />
+
+        <EditText
+            android:id="@+id/write_power_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="20dp"
+            android:layout_weight="0.60"
+            android:background="@drawable/edit_text_style"
+            android:gravity="left"
+            android:inputType="numberDecimal|numberSigned"
+            android:maxLength="5"
+            android:paddingLeft="5dp"
+            android:text="0" />
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="3dip"
+        android:background="@drawable/table_style"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/embedded_enabled"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/Enable" />
+
+        <LinearLayout
+            android:id="@+id/embedded_layout"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingLeft="15dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/MemBank" />
+
+                <Spinner
+                    android:id="@+id/embedded_bank"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:entries="@array/MemBank_array" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_margin="3dip"
+                android:orientation="horizontal"
+                android:paddingLeft="15dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/Start" />
+
+                <EditText
+                    android:id="@+id/embedded_start"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="15dp"
+                    android:layout_marginRight="20dp"
+                    android:width="30dp"
+                    android:background="@drawable/edit_text_style"
+                    android:inputType="number"
+                    android:maxLength="2"
+                    android:paddingLeft="5dp"
+                    android:text="@string/zero" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="3dp"
+                    android:text="@string/Lenght" />
+
+                <EditText
+                    android:id="@+id/embedded_length"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="15dp"
+                    android:width="30dp"
+                    android:background="@drawable/edit_text_style"
+                    android:inputType="number"
+                    android:maxLength="2"
+                    android:paddingLeft="5dp"
+                    android:text="@string/zero" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

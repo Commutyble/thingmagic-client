@@ -26,10 +26,6 @@ licensekey: ../samples/licensekey.o $(LIB)
 multiprotocolread: ../samples/multiprotocolread.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
-../samples/savedconfig.o: $(HEADERS) $(LIB)
-savedconfig: ../samples/savedconfig.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
 ../samples/writetag.o: $(HEADERS) $(LIB)
 writetag: ../samples/writetag.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
@@ -42,13 +38,13 @@ readintoarray: ../samples/readintoarray.o $(LIB)
 readasync: ../samples/readasync.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
+../samples/readasyncgpo.o: $(HEADERS) $(LIB)
+readasyncgpo: ../samples/readasyncgpo.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
+
 ../samples/multireadasync.o: $(HEADERS) $(LIB)
 multireadasync: ../samples/multireadasync.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
-../samples/demo.o: $(HEADERS) $(LIB)
-demo: ../samples/demo.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lreadline -lpthread $(LTKC_LIBS)
 
 ../samples/filter.o: $(HEADERS) $(LIB)
 filter: ../samples/filter.o $(LIB)
@@ -74,10 +70,6 @@ readasynctrack: ../samples/readasynctrack.o $(LIB)
 readasyncfilter: ../samples/readasyncfilter.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
-../samples/readasyncfilter-ISO18k-6b.o: $(HEADERS) $(LIB)
-readasyncfilter-ISO18k-6b: ../samples/readasyncfilter-ISO18k-6b.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
 ../samples/serialtime.o: $(HEADERS) $(LIB)
 serialtime: ../samples/serialtime.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
@@ -93,24 +85,12 @@ tagdir: ../samples/tagdir.o $(LIB)
 onreader-tagdir: ../samples/onreader-tagdir.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
-../samples/denatranIAVcustomtagoperations.o: $(HEADERS) $(LIB)
-denatranIAVcustomtagoperations: ../samples/denatranIAVcustomtagoperations.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
 ../samples/readerstats.o: $(HEADERS) $(LIB)
 readerstats: ../samples/readerstats.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
 ../samples/readerInfo.o: $(HEADERS) $(LIB)
 readerInfo: ../samples/readerInfo.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
-../samples/antennalist.o: $(HEADERS) $(LIB)
-antennalist: ../samples/antennalist.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
-../samples/securereaddata.o: $(HEADERS) $(LIB)
-securereaddata: ../samples/securereaddata.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
 ../samples/readstopTrigger.o: $(HEADERS) $(LIB)
@@ -125,20 +105,8 @@ rebootReader: ../samples/rebootReader.o $(LIB)
 readasyncGPIOControl: ../samples/readasyncGPIOControl.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
-../samples/readcustomtransport.o: $(HEADERS) $(LIB)
-readcustomtransport: ../samples/readcustomtransport.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
-../samples/savedreadplanconfig.o: $(HEADERS) $(LIB)
-savedreadplanconfig: ../samples/savedreadplanconfig.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
 ../samples/loadsaveconfiguration.o: $(HEADERS) $(LIB)
 loadsaveconfiguration: ../samples/loadsaveconfiguration.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
-../samples/bap.o: $(HEADERS) $(LIB)
-bap: ../samples/bap.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
 
 ../samples/readallmembanks-GEN2.o: $(HEADERS) $(LIB)
@@ -149,28 +117,8 @@ readallmembanks-GEN2: ../samples/readallmembanks-GEN2.o $(LIB)
 gpiocommands: ../samples/gpiocommands.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
 
-../samples/SL900Agetcalibrationdata.o: $(HEADERS) $(LIB)
-SL900Agetcalibrationdata: ../samples/SL900Agetcalibrationdata.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
-../samples/SL900Agetsensorvalue.o: $(HEADERS) $(LIB)
-SL900Agetsensorvalue: ../samples/SL900Agetsensorvalue.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
-../samples/SL900Asetcalibrationdata.o: $(HEADERS) $(LIB)
-SL900Asetcalibrationdata: ../samples/SL900Asetcalibrationdata.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)	
-
-../samples/SL900Asetsfeparameters.o: $(HEADERS) $(LIB)
-SL900Asetsfeparameters: ../samples/SL900Asetsfeparameters.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
 ../samples/authenticate.o: $(HEADERS) $(LIB)
 authenticate: ../samples/authenticate.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
-
-../samples/readbuffer.o: $(HEADERS) $(LIB)
-readbuffer: ../samples/readbuffer.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -lpthread $(LTKC_LIBS)
 
 ../samples/untraceable.o: $(HEADERS) $(LIB)

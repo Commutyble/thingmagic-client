@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -49,12 +49,21 @@ typedef enum TMR_TagProtocol
 {
   //UHF Protocols
   TMR_TAG_PROTOCOL_NONE              = 0x00,
+#ifdef TMR_ENABLE_ISO180006B
   TMR_TAG_PROTOCOL_ISO180006B        = 0x03,
+#endif /* TMR_ENABLE_ISO180006B */
+
   TMR_TAG_PROTOCOL_GEN2              = 0x05,
-  TMR_TAG_PROTOCOL_ISO180006B_UCODE  = 0x06, 
+
+#ifdef TMR_ENABLE_ISO180006B
+  TMR_TAG_PROTOCOL_ISO180006B_UCODE  = 0x06,
+#endif /* TMR_ENABLE_ISO180006B */
+
+#ifndef TMR_ENABLE_GEN2_ONLY
   TMR_TAG_PROTOCOL_IPX64             = 0x07,
   TMR_TAG_PROTOCOL_IPX256            = 0x08,
   TMR_TAG_PROTOCOL_ATA               = 0x1D,
+#endif /* TMR_ENABLE_GEN2_ONLY */
 
   // HF Protocols
   TMR_TAG_PROTOCOL_ISO14443A         = 0x09,

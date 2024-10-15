@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2009 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -37,9 +37,8 @@
 #include "osdep.h"
 
 #ifdef TMR_ENABLE_SERIAL_READER
-bool isStatsCmdSent = false;
+#define TMR_HWINFO_SIZE 127
 bool clearTagBuffer = false;
-bool isClearTagBufferCmdSent = false;
 #ifdef TMR_ENABLE_UHF
 extern bool isMultiSelectEnabled;
 extern bool isEmbeddedTagopEnabled;
@@ -54,37 +53,10 @@ extern int LastDSPMicro;
 #ifdef TMR_ENABLE_UHF
 /* This is used to enable the Gen2 secure readdata option */
 extern bool isSecureAccessEnabled;
-
-bool isM6eFamily(TMR_SR_SerialReader *sr)
-{
-  if((TMR_SR_MODEL_M6E == sr->versionInfo.hardware[0]) ||
-     (TMR_SR_MODEL_M6E_I == sr->versionInfo.hardware[0]) ||
-     (TMR_SR_MODEL_M6E_NANO == sr->versionInfo.hardware[0]) ||
-     (TMR_SR_MODEL_MICRO == sr->versionInfo.hardware[0]))
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-}
-
-bool isNotM6eFamily(TMR_SR_SerialReader *sr)
-{
-  if((TMR_SR_MODEL_M6E != sr->versionInfo.hardware[0]) &&
-     (TMR_SR_MODEL_MICRO != sr->versionInfo.hardware[0]) &&
-     (TMR_SR_MODEL_M6E_NANO != sr->versionInfo.hardware[0]) &&
-     (TMR_SR_MODEL_M6E_I != sr->versionInfo.hardware[0]))
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-}
 #endif /* TMR_ENABLE_UHF */
+
+static TMR_Status
+TMR_SR_cmdSetPerAntennaTime(struct TMR_Reader* reader, const TMR_PortValueList* list);
 
 void 
 fillStaticTxRxMapData(TMR_Reader *reader, TMR_SR_PortDetect *ports, uint8_t numPorts)
@@ -106,71 +78,13 @@ fillStaticTxRxMapData(TMR_Reader *reader, TMR_SR_PortDetect *ports, uint8_t numP
   }
 }
 
-static TMR_Status
-initTxRxMapFromPorts(TMR_Reader *reader)
+TMR_Status
+updateTxRxMapData(TMR_Reader *reader, TMR_SR_PortDetect *ports, uint8_t numPorts)
 {
-  TMR_Status ret;
-  TMR_SR_PortDetect ports[TMR_SR_MAX_ANTENNA_PORTS];
-  uint8_t i, numPorts;
-  TMR_SR_SerialReader *sr;
+  TMR_SR_SerialReader *sr = &reader->u.serialReader;
+  uint8_t i;
 
-  numPorts = numberof(ports);
-  sr = &reader->u.serialReader;
-
-  /* Need number of ports to set up Tx-Rx map */
-  ret = TMR_SR_cmdAntennaDetect(reader, &numPorts, ports);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  /* Modify TxRxMap according to reader product */
-  switch (sr->productId)
-  {
-#ifdef TMR_ENABLE_UHF
-    case 0x0001:
-    {
-      /* Ruggedized Reader (Tool Link, Vega) */
-      TMR_AntennaMap newMap[] = {{1,2,2}, {2,5,5}, {3,1,1}};
-      numPorts = 3;
-
-      for (i = 0; i < numPorts; i++)
-      {
-        sr->staticTxRxMapData[i].antenna = newMap[i].antenna;
-        sr->staticTxRxMapData[i].rxPort  = newMap[i].rxPort;
-        sr->staticTxRxMapData[i].txPort  = newMap[i].txPort;
-
-        if (0 == reader->tagOpParams.antenna && ports[i].detected)
-        {
-          reader->tagOpParams.antenna = ports[i].port;
-        }
-      }
-      break;
-    }
-
-    case 0x0002:
-      /*
-       * USB Reader -- Default map is okay
-       * M5e-C only has 1 antenna port, anyway
-       *
-       * However, M6eMicro USB has 2 ports and no auto antenna detection,
-       * so manually limit to first port for now.
-       * TODO: Revisit if M6eMicro USB starts supporting port 2 in future.
-       * port for now.
-       */
-      if ((TMR_SR_MODEL_MICRO == sr->versionInfo.hardware[0]) &&
-        (sr->versionInfo.hardware[3] == TMR_SR_MODEL_M6E_MICRO_USB))
-      {
-        fillStaticTxRxMapData(reader, ports, 1);
-        break;
-      }
-#endif /*TMR_ENABLE_UHF */
-    default:
-    {
-      fillStaticTxRxMapData(reader, ports, numPorts);
-      break;
-    }
-  }
+  fillStaticTxRxMapData(reader, ports, numPorts);
 
   sr->staticTxRxMap.max = TMR_SR_MAX_ANTENNA_PORTS;
   sr->staticTxRxMap.len = numPorts;
@@ -192,20 +106,38 @@ initTxRxMapFromPorts(TMR_Reader *reader)
 }
 
 TMR_Status
+initTxRxMapFromPorts(TMR_Reader *reader)
+{
+  TMR_SR_PortDetect ports[TMR_SR_MAX_ANTENNA_PORTS];
+  uint8_t numPorts;
+  TMR_Status ret;
+  numPorts = numberof(ports);
+
+  /* Need number of ports to set up Tx-Rx map */
+  ret = TMR_SR_cmdAntennaDetect(reader, &numPorts, ports);
+  if (TMR_SUCCESS != ret)
+  {
+    return ret;
+  }
+
+  ret = updateTxRxMapData(reader, ports, numPorts);
+  if (TMR_SUCCESS != ret)
+  {
+    return ret;
+  }
+
+  return TMR_SUCCESS;
+}
+
+TMR_Status
 TMR_SR_boot(TMR_Reader *reader, uint32_t currentBaudRate)
 {
   TMR_Status ret;
-  uint8_t program;
-#ifdef TMR_ENABLE_UHF
-  bool boolval;
-#endif /* TMR_ENABLE_UHF */
   int i = 0;
-  TMR_TagProtocolList protocolList;
-  TMR_TagProtocol protocols[TMR_MAX_PROTOCOLS];
   TMR_SR_SerialReader *sr = &reader->u.serialReader;
   ret = TMR_SUCCESS;
 
-#ifdef TMR_ENABLE_UHF
+#if TMR_ENABLE_WAKE_PREAMBLES
     /*
    * Once out of bootloader, configure for wakeup preambles.
    * Bootloader doesn't support preambles, and some versions
@@ -221,43 +153,53 @@ TMR_SR_boot(TMR_Reader *reader, uint32_t currentBaudRate)
   {
     sr->supportsPreamble = true;
   }
-#endif /* TMR_ENABLE_UHF */
+#endif /* TMR_ENABLE_WAKE_PREAMBLES */
 
-  /* Get current program */
-  ret = TMR_SR_cmdGetCurrentProgram(reader, &program);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  /* If bootloader, enter app */
-  if ((program & 0x3) == 1)
-  {
-    ret = TMR_SR_cmdBootFirmware(reader);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-  }
-
-  /* Initialize cached power mode value */
-  /* Should read power mode as soon as possible.
-   * Default mode assumes module is in deep sleep and
-   * adds a lengthy "wake-up preamble" to every command.
+  /* Supported protocol bytes will be 0,
+   * if the module is in boot loader mode.
    */
-  if (sr->powerMode == TMR_SR_POWER_MODE_INVALID)
+  if (reader->u.serialReader.versionInfo.protocols == 0)
   {
-    ret = TMR_paramGet(reader, TMR_PARAM_POWERMODE, &sr->powerMode);
-    if (TMR_SUCCESS != ret)
     {
-      return ret;
+      ret = TMR_SR_cmdBootFirmware(reader);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
     }
   }
+
+#if TMR_ENABLE_WAKE_PREAMBLES
+  /* The power mode value is used while sending flush bytes,
+   * but Pico,Nano and M3E modules do not support flush bytes!
+   * Hence, no need to get power mode here.
+   */
+  if ((TMR_SR_MODEL_M7E      != sr->versionInfo.hardware[0]) &&
+      (TMR_SR_MODEL_M6E_NANO != sr->versionInfo.hardware[0]) &&
+      (TMR_SR_MODEL_M3E      != sr->versionInfo.hardware[0]))
+  {
+    /* Initialize cached power mode value */
+    /* Should read power mode as soon as possible.
+     * Default mode assumes module is in deep sleep and
+     * adds a lengthy "wake-up preamble" to every command.
+     */
+    if (sr->powerMode == TMR_SR_POWER_MODE_INVALID)
+    {
+      ret = TMR_paramGet(reader, TMR_PARAM_POWERMODE, &sr->powerMode);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+    }
+  }
+#endif /* TMR_ENABLE_WAKE_PREAMBLES */
+
+#if TMR_ENABLE_CRC
 #ifdef TMR_ENABLE_UHF
   /**
    * In case for M6E and it's variant  check for CRC
    **/
-  if (isM6eFamily(&reader->u.serialReader))
+  if (TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])
   {
     /**
      * Get the transport/BUS type
@@ -287,56 +229,7 @@ TMR_SR_boot(TMR_Reader *reader, uint32_t currentBaudRate)
     }
   }
 #endif /* TMR_ENABLE_UHF */
-  
-  if(sr->isUserBaudRateSet)
-  {
-    if (sr->baudRate != currentBaudRate)
-    {
-      ret = TMR_paramSet(reader, TMR_PARAM_BAUDRATE, &sr->baudRate);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-    }
-  }
-  else
-  {
-    sr->baudRate = currentBaudRate;
-  }
-
-  /*ret = TMR_SR_cmdVersion(reader, &sr->versionInfo);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }*/
-
-  /* If we need to check the version information for something operational,
-     this is the place to do it. */
-  //sr->gpioDirections = -1; /* Needs fetching */
-
-  /**
-   * This version check is required for the new reader stats.
-   * Older firmwares does not support this. Currently, firmware version
-   * 1.21.1.2 has support for new reader stats.
-   **/
-#ifdef TMR_ENABLE_UHF 
-  if ((((TMR_SR_MODEL_M6E == sr->versionInfo.hardware[0]) || (TMR_SR_MODEL_M6E_I == sr->versionInfo.hardware[0]))
-    && compareVersion(reader, 1, 21, 1, 2))
-    || ((TMR_SR_MODEL_MICRO == sr->versionInfo.hardware[0]) && compareVersion(reader, 1, 3, 0, 20))
-    || ((TMR_SR_MODEL_M6E_NANO == sr->versionInfo.hardware[0]) && compareVersion(reader, 1, 3, 2, 74))
-    || (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
-  {
-    reader->_storeSupportsResetStats = true;
-  }
-#ifdef TMR_ENABLE_UHF
-  else
-  {
-    reader->_storeSupportsResetStats = false;
-  }
-#endif /* TMR_ENABLE_UHF */
-
-  reader->pSupportsResetStats = &(reader->_storeSupportsResetStats);
+#endif /* TMR_ENABLE_CRC */
 
   /* Initialize the paramPresent and paramConfirmed bits. */
   /* This block is expected to be collapsed by the compiler into a
@@ -357,146 +250,69 @@ TMR_SR_boot(TMR_Reader *reader, uint32_t currentBaudRate)
     sr->paramConfirmed[i] = sr->paramPresent[i];
   }
 
-  /* Get productGroupID early, so other params (e.g., txRxMap) can use it */
+  reader->tagOpParams.protocol = sr->currentProtocol;
+  reader->tagOpParams.antenna = 0;
+  return ret;
+}
+
+/* Get version command response on default baudrate */
+TMR_Status
+TMR_SR_getVersion(TMR_Reader* reader)
+{
+  bool isVerCmdRspRcvd = false;
+  TMR_Status ret = TMR_SUCCESS;
+  TMR_SR_SerialTransport *transport;
+  transport = &reader->u.serialReader.transport;
+
+  if (NULL != transport->setBaudRate)
   {
-    ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_PRODUCT_GROUP_ID, &sr->productId);
-    if (TMR_SUCCESS != ret)
-    {
-#ifdef TMR_ENABLE_UHF
-      if (TMR_ERROR_MSG_INVALID_PARAMETER_VALUE == ret)
-      {
-        /*
-         * Modules with firmware older than wilder will throw 0x105 error, as it was not 
-         * implemented. Catch this error but do not return.
-         */
-		sr->productId = 0xFFFF;
-      }
-      else
-#endif /* TMR_ENABLE_UHF */
-      {
-        return ret;
-      }
-    }
-#ifdef TMR_ENABLE_UHF
-    if(TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0])
-    {
-      /* 
-       * If product is ruggedized reader, 
-       * set reader's GPO pin which is used for antenna port switching
-       */
-      if (1 == sr->productId)
-      {
-        uint8_t pin = 1;
-        ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ANTENNA_CONTROL_GPIO, &pin);
-        if (TMR_SUCCESS != ret)
-        {
-          return ret;
-        }
-      }
-    }
-#endif /* TMR_ENABLE_UHF */
-  }
-  /* Set region if user set the param */
-  if (TMR_REGION_NONE != sr->regionId)
-  {
-    ret = TMR_SR_cmdSetRegion(reader, sr->regionId);
+    /**
+    * some transport layer does not support baud rate settings.
+    * for ex: TCP transport. In that case skip the baud rate
+    * settings.
+    */ 
+    ret = transport->setBaudRate(transport, reader->u.serialReader.baudRate);
     if (TMR_SUCCESS != ret)
     {
       return ret;
     }
   }
 
-  ret = TMR_SR_cmdGetCurrentProtocol(reader, &sr->currentProtocol);
-  if (TMR_SUCCESS != ret)
+  ret = transport->flush(transport);
+  if ((TMR_SUCCESS != ret) && (TMR_ERROR_UNIMPLEMENTED != ret))
   {
     return ret;
   }
 
-  protocolList.list = &protocols[0];
-  protocolList.max = TMR_MAX_PROTOCOLS;
-
-  ret = TMR_SR_cmdGetAvailableProtocols(reader, &protocolList);
-#ifdef TMR_ENABLE_UHF
-  if (TMR_TAG_PROTOCOL_NONE == sr->currentProtocol)
+  while(false == isVerCmdRspRcvd)
   {
-    for(i = 0; i < protocolList.len; i++)
+    ret = TMR_SR_cmdVersion(reader, &(reader->u.serialReader.versionInfo));
+    if (TMR_SUCCESS == ret)
     {
-      /*
-       * Search whether GEN2 Protocol is supported by reader in its protocol list.
-       * If so set it as current protocol, else leave protocol selection to user.
+      isVerCmdRspRcvd = true;
+      reader->connected = true;
+      break;
+    }
+    else if(TMR_ERROR_BOOT_RESPONSE == ret)
+    {
+      continue;
+    }
+    else if (TMR_ERROR_TIMEOUT != ret)
+    {
+      /* Timeouts are okay -- they usually mean "wrong baud rate",
+       * so just try the next one.  All other errors are real
+       * and should be forwarded immediately.
        */
-      if(TMR_TAG_PROTOCOL_GEN2 == protocolList.list[i])
+      if (TMR_ERROR_COMM(ret))
       {
-        ret = TMR_SR_cmdSetProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-        if (TMR_SUCCESS != ret)
-        {
-          return ret;
-        }
-        sr->currentProtocol = TMR_TAG_PROTOCOL_GEN2;
-        break;
-      }
+        reader->connected = true;
+        return TMR_SUCCESS_STREAMING;
+      } 
     }
-  }
-#endif /* TMR_ENABLE_UHF */
-
-  reader->tagOpParams.protocol = sr->currentProtocol;
-  reader->tagOpParams.antenna = 0;
-  ret = initTxRxMapFromPorts(reader);
-
-#ifdef TMR_ENABLE_UHF
-  /**
-   * Enable the extended EPC flag in case
-   * of M5E and its variants
-   */
-  if (isNotM6eFamily(sr) && (TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0]))
-  {
-    /* Do this only if the module is other than M6e*/
-    boolval = true;
-    ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_EXTENDED_EPC, &boolval);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-    reader->u.serialReader.extendedEPC = boolval;
+    /* break the while loop on failure */
+    break;
   }
 
-  /* Report RSSI in dbm */
-  if (isNotM6eFamily(sr) && (TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0]))
-  {
-    /* Do this only if the module is other than M6e*/
-    boolval = true;
-    ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_RSSI_IN_DBM, &boolval);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-  }
-  else
-#endif /* TMR_ENABLE_UHF */
-  { /* Do this only in case of M6e */
-    /* Get reader's enable read filter setting */
-    ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ENABLE_READ_FILTER, &reader->u.serialReader.enableReadFiltering);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-
-#ifdef TMR_ENABLE_UHF
-    if(TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0])
-    {
-      int32_t timeout = 0;
-      /* Get reader's read filter entry timeout */
-      ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_READ_FILTER_TIMEOUT, &timeout);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      reader->u.serialReader.readFilterTimeout = (0 == timeout) ? TMR_DEFAULT_READ_FILTER_TIMEOUT : timeout;
-    }
-#endif /* TMR_ENABLE_UHF */
-  }
-
-  
   return ret;
 }
 
@@ -515,10 +331,18 @@ TMR_SR_cmdProbeBaudRate(TMR_Reader *reader, uint32_t *currentBaudRate)
   uint32_t rate = 0x00;
   int i,count = 2;
   uint32_t tTimeout = 0;
+  bool isVerCmdRspRcvd = false;
 
   ret = TMR_SUCCESS;
   sr = &reader->u.serialReader;
   transport = &reader->u.serialReader.transport;
+
+  /* Open the serial port */
+  ret = transport->open(transport);
+  if (TMR_SUCCESS != ret)
+  {
+    return ret;
+  }
 
   /**
    * If user not set any trasportTimeout value.
@@ -571,42 +395,41 @@ TMR_SR_cmdProbeBaudRate(TMR_Reader *reader, uint32_t *currentBaudRate)
       return ret;
     }
 
-contact:
-    ret = TMR_SR_cmdVersion(reader, &(reader->u.serialReader.versionInfo));
-    if (TMR_SUCCESS == ret)
+    while(false == isVerCmdRspRcvd)
     {
-      /* Got a reply?  Then this is the right baud rate! */
-      reader->u.serialReader.transportTimeout = tTimeout;
+      ret = TMR_SR_cmdVersion(reader, &(reader->u.serialReader.versionInfo));
+      if (TMR_SUCCESS == ret)
+      {
+        /* Got a reply?  Then this is the right baud rate! */
+        reader->u.serialReader.transportTimeout = tTimeout;
+        isVerCmdRspRcvd = true;
+        break;
+      }
+      else if(TMR_ERROR_BOOT_RESPONSE == ret)
+      {
+        continue;
+      }
+      /* Timeouts are okay -- they usually mean "wrong baud rate",
+       * so just try the next one.  All other errors are real
+       * and should be forwarded immediately. 
+       */
+      else if (TMR_ERROR_TIMEOUT != ret)
+      {
+        if (TMR_ERROR_COMM(ret))
+        {
+          reader->connected = true;
+
+          /* copy the baud rate */
+          *currentBaudRate = rate;
+
+          return TMR_SUCCESS_STREAMING;
+        }
+      }
       break;
     }
-
-    else if(TMR_ERROR_BOOT_RESPONSE == ret)
+    if (isVerCmdRspRcvd)
     {
-      goto contact;
-    }
-
-    /* Timeouts are okay -- they usually mean "wrong baud rate",
-    * so just try the next one.  All other errors are real
-    * and should be forwarded immediately. */
-    else if (TMR_ERROR_TIMEOUT != ret)
-    {
-      if (TMR_ERROR_COMM(ret))
-      {
-        reader->u.serialReader.transportTimeout = tTimeout;
-        ret = verifySearchStatus(reader);
-        if (TMR_SUCCESS == ret)
-        {
-          goto contact;
-        }
-        else
-        {
-          return ret;
-        }
-      } 
-      else
-      {
-        return ret;
-      }
+      break;
     }
   }
   if (i == sr->probeBaudRates.len)
@@ -615,7 +438,10 @@ contact:
   }
 
   /* copy the baud rate */
-  *currentBaudRate = rate;  
+  *currentBaudRate = rate;
+
+  /* Close the port, as TMR_Connect() will open the port again */
+  transport->shutdown(transport);
   return ret;
 }
 
@@ -623,102 +449,61 @@ TMR_Status
 TMR_SR_connect(TMR_Reader *reader)
 {
   TMR_Status ret;
-  uint32_t rate;
   TMR_SR_SerialReader *sr;
   TMR_SR_SerialTransport *transport;
-  
+
   ret = TMR_SUCCESS;
   sr = &reader->u.serialReader;
   transport = &reader->u.serialReader.transport;
 
-  ret = transport->open(transport);
+  if (!reader->connected)
+  {
+    ret = transport->open(transport);
+    if (TMR_SUCCESS != ret)
+    {
+      return ret;
+    }
+  }
+  
+  /* Get the version command response on sr->baudRate */
+  ret = TMR_SR_getVersion(reader);
   if (TMR_SUCCESS != ret)
   {
+    if (TMR_SUCCESS_STREAMING != ret)
+    {
+      /* Close the port as connect failed */
+      transport->shutdown(transport);
+    }
+
     return ret;
   }
-  rate = sr->probeBaudRates.list[0]; //this fixes the compilation errors in some compilers
-  ret = TMR_SR_cmdProbeBaudRate(reader, &rate);
-  if (TMR_SUCCESS != ret)
+
+#if TMR_ENABLE_M6E_COMPATIBILITY
+  if ((TMR_SR_MODEL_M6E      == sr->versionInfo.hardware[0]) ||
+      (TMR_SR_MODEL_M6E_I    == sr->versionInfo.hardware[0]) ||
+      (TMR_SR_MODEL_MICRO    == sr->versionInfo.hardware[0]) ||
+      (TMR_SR_MODEL_M6E_NANO == sr->versionInfo.hardware[0]))
   {
-    return ret;
+    sr->isM6eFamily = true;
   }
+#endif /* TMR_ENABLE_M6E_COMPATIBILITY */
 
-  reader->connected = true;
-
-  if(TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0])
-  {
-#ifdef TMR_ENABLE_UHF
-    TMR_RP_init_simple(&reader->readParams.defaultReadPlan, 0, NULL, 
-                         TMR_TAG_PROTOCOL_GEN2, 1);
-
-    reader->userMetadataFlag = (TMR_TRD_METADATA_FLAG_RSSI |
-                                TMR_TRD_METADATA_FLAG_FREQUENCY |
-                                TMR_TRD_METADATA_FLAG_PHASE |
-                                TMR_TRD_METADATA_FLAG_GPIO_STATUS |
-                                TMR_TRD_METADATA_FLAG_GEN2_Q |
-                                TMR_TRD_METADATA_FLAG_GEN2_LF |
-                                TMR_TRD_METADATA_FLAG_GEN2_TARGET |
-                                TMR_TRD_METADATA_FLAG_READCOUNT |
-                                TMR_TRD_METADATA_FLAG_ANTENNAID |
-                                TMR_TRD_METADATA_FLAG_TIMESTAMP |
-                                TMR_TRD_METADATA_FLAG_PROTOCOL |
-                                TMR_TRD_METADATA_FLAG_DATA);
-
-    reader->userStatsFlag = (TMR_READER_STATS_FLAG_RF_ON_TIME |
-                             TMR_READER_STATS_FLAG_NOISE_FLOOR_SEARCH_RX_TX_WITH_TX_ON |
-                             TMR_READER_STATS_FLAG_PROTOCOL |
-                             TMR_READER_STATS_FLAG_ANTENNA_PORTS |
-                             TMR_READER_STATS_FLAG_FREQUENCY |
-                             TMR_READER_STATS_FLAG_CONNECTED_ANTENNAS |
-                             TMR_READER_STATS_FLAG_TEMPERATURE);
-#endif /* TMR_ENABLE_UHF */
-  }
-  else
-  {
 #ifdef TMR_ENABLE_HF_LF
-    TMR_RP_init_simple(&reader->readParams.defaultReadPlan, 0, NULL, 
-                         TMR_TAG_PROTOCOL_ISO14443A, 1);
-
-    reader->userMetadataFlag = (TMR_TRD_METADATA_FLAG_READCOUNT |
-                                TMR_TRD_METADATA_FLAG_ANTENNAID |
-                                TMR_TRD_METADATA_FLAG_TIMESTAMP |
-                                TMR_TRD_METADATA_FLAG_PROTOCOL  |
-                                TMR_TRD_METADATA_FLAG_DATA|
-                                TMR_TRD_METADATA_FLAG_TAGTYPE);
-
-    reader->userStatsFlag = (TMR_READER_STATS_FLAG_TEMPERATURE |
-                             TMR_READER_STATS_FLAG_DC_VOLTAGE);
-#endif /* TMR_ENABLE_HF_LF */
-  }
-
-  reader->allValidMetadataFlags = reader->userMetadataFlag;
-
-#ifdef TMR_ENABLE_UHF
-  if (isM6eFamily(&reader->u.serialReader) || 
-       (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
-  {
-    reader->isM6eVariant = true;
-  }
-
   /* At this point we will have the firmware version.
    * Check for available features as per firmware version.
    */
   checkForAvailableFeatures(reader);
+#endif /* TMR_ENABLE_HF_LF */
 
   /* Boot */
-  ret = TMR_SR_boot(reader, rate);
+  ret = TMR_SR_boot(reader, sr->baudRate);
 
-  if(ret !=TMR_SUCCESS)
+  if(ret != TMR_SUCCESS)
   {
     if(ret == TMR_ERROR_AUTOREAD_ENABLED)
     {
-      ret = verifySearchStatus(reader);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      ret = TMR_SR_boot(reader, rate);
+      reader->connected = true;
+      return TMR_SUCCESS_STREAMING;
     }
   }
 
@@ -731,7 +516,30 @@ TMR_SR_destroy(TMR_Reader *reader)
   TMR_SR_SerialTransport *transport;
   reader->hasContinuousReadStarted = false;
 
-  transport = &reader->u.serialReader.transport;
+#ifdef TMR_ENABLE_BACKGROUND_READS
+  /* Send stop read only if,
+   * 1. continuous read enabled
+   * 2. Read is in progress
+   * 3. Stop read is not sent
+   */
+  if ((true == reader->continuousReading) && (true == reader->trueAsyncflag))
+  {
+    /* stop the read for safe exit from the api, 
+     * incase if read is initiated, but user forgets to send stopread.
+     */
+    reader->cmdStopReading(reader);
+
+    /* Wait while the background reader is still reading. */
+    pthread_mutex_lock(&reader->backgroundLock);
+    while (TMR_READ_STATE_DONE != reader->readState)
+    {
+      pthread_cond_wait(&reader->readCond, &reader->backgroundLock);
+    }
+    pthread_mutex_unlock(&reader->backgroundLock);
+  }
+#endif /* TMR_ENABLE_BACKGROUND_READS */
+
+#if TMR_ENABLE_CRC
 #ifdef TMR_ENABLE_UHF
   /**
    * Enable the CRC, in case it is disabled
@@ -742,6 +550,9 @@ TMR_SR_destroy(TMR_Reader *reader)
     TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_SEND_CRC, &reader->u.serialReader.crcEnabled);
   }
 #endif /* TMR_ENABLE_UHF */
+#endif /* TMR_ENABLE_CRC */
+  
+  transport = &reader->u.serialReader.transport;
   transport->shutdown(transport);
   reader->connected = false;
 
@@ -754,58 +565,9 @@ TMR_SR_destroy(TMR_Reader *reader)
 }
 
 static TMR_Status
-autoDetectAntennaList(struct TMR_Reader *reader)
-{
-  TMR_Status ret;
-  TMR_SR_PortDetect ports[TMR_SR_MAX_ANTENNA_PORTS];
-  TMR_SR_PortPair searchList[TMR_SR_MAX_ANTENNA_PORTS];
-  uint8_t i, listLen, numPorts;
-  uint16_t j;
-  TMR_AntennaMapList *map;
-    
-  ret = TMR_SUCCESS;
-  map = reader->u.serialReader.txRxMap;
-
-  /* 1. Detect current set of antennas */
-  numPorts = TMR_SR_MAX_ANTENNA_PORTS;
-  ret = TMR_SR_cmdAntennaDetect(reader, &numPorts, ports);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  /* 2. Set antenna list based on detected antennas (Might be clever
-   * to cache this and not bother sending the set-list command
-   * again, but it's more code and data space).
-   */
-  for (i = 0, listLen = 0; i < numPorts; i++)
-  {
-    if (ports[i].detected)
-    {
-      /* Ensure that the port exists in the map */
-      for (j = 0; j < map->len; j++)
-        if (ports[i].port == map->list[j].txPort)
-        {
-          searchList[listLen].txPort = map->list[j].txPort;
-          searchList[listLen].rxPort = map->list[j].rxPort;
-          listLen++;
-          break;
-        }
-    }
-  }
-  if (0 == listLen) /* No ports auto-detected */
-  {
-    return TMR_ERROR_NO_ANTENNA;
-  }
-  ret = TMR_SR_cmdSetAntennaSearchList(reader, listLen, searchList);
-  
-  return ret;
-}
-
-static TMR_Status
 setAntennaList(struct TMR_Reader *reader, TMR_uint8List *antennas)
 {
-  TMR_SR_PortPair searchList[64];
+  uint8_t searchList[TMR_SR_MAX_ANTENNA_PORTS];
   uint16_t i, j, listLen;
   TMR_AntennaMapList *map;
 
@@ -819,8 +581,7 @@ setAntennaList(struct TMR_Reader *reader, TMR_uint8List *antennas)
     {
       if (antennas->list[i] == map->list[j].antenna)
       {
-        searchList[listLen].txPort = map->list[j].txPort;
-        searchList[listLen].rxPort = map->list[j].rxPort;
+        searchList[listLen] = map->list[j].txPort;
         listLen++;
         break;
       }
@@ -909,27 +670,30 @@ validateParams(TMR_ReadPlan *plan)
 }
 
 /** Recursively assemble a setAntennaReadTime command
- * @arg reader  Reader object
- * @arg msg  Serial message buffer
- * @arg pI  Current write position in serial read buffer (pass by pointer, so we can modify its value)
- * @arg plan  Read plan (recursively descended)
- * @arg ontime  Number of milliseconds alloted to this read plan
+ * @arg reader   Reader object
+ * @arg plan     Read plan (recursively descended)
+ * @arg portList pointer to structure  TMR_PortValueList
+ * @arg onTime   RF on time in milliseconds
+ * @arg offTime  RF off time in milliseconds
  */
 TMR_Status
-setAntennaReadTimeHelper(struct TMR_Reader *reader, uint8_t* msg, uint8_t* pI, TMR_ReadPlan* plan, uint32_t ontime, uint32_t offtime)
+setAntennaReadTimeHelper(struct TMR_Reader *reader, TMR_ReadPlan* plan, TMR_PortValueList *portList, 
+                           uint32_t onTime, uint32_t offTime)
 {
   uint32_t subOntime = 0, subOfftime = 0;
-  int j, antCount, k;
-  TMR_Status ret;
+  uint8_t antCount, j, k;
   TMR_AntennaMapList *map;
+  static uint8_t idx = 0;
+  TMR_Status ret;
   
   map = reader->u.serialReader.txRxMap;
+
   switch (plan->type)
   {
     case TMR_READ_PLAN_TYPE_SIMPLE:
       {
         //Find out the exact number of valid antennas from the provided antenna list.
-        for (j=0, antCount = 0; j<plan->u.simple.antennas.len; j++)
+        for (j = 0, antCount = 0; j < plan->u.simple.antennas.len; j++)
         {
           if(plan->u.simple.antennas.list[j])
           {
@@ -946,28 +710,28 @@ setAntennaReadTimeHelper(struct TMR_Reader *reader, uint8_t* msg, uint8_t* pI, T
         if(antCount)
         {
           //Divide Global asyncOn time by number of antennas.
-          subOntime = ontime / antCount;
+          subOntime = onTime / antCount;
 
           //Divide Global asyncOff time by number of antennas.
-          subOfftime = offtime / antCount;
+          subOfftime = offTime / antCount;
         }
 
-        // Embedding ontime and offtime for the antenna list in "per antenna ontime"(91 07) command.
-        for (j=0; j<plan->u.simple.antennas.len; j++)
+        // Embedding ontime and offtime for the antenna list in "per antenna ontime"(91 87) command.
+        for (j = 0; j < plan->u.simple.antennas.len; j++)
         {
-          for (k=0; k<map->len; k++)
+          for (k = 0; k < map->len; k++)
           {
             if ((plan->u.simple.antennas.list[j] == map->list[k].antenna))
             {
-              SETU8 (msg, *pI, map->list[k].txPort);
-              SETU16(msg, *pI, subOntime);
+              portList->list[idx].port  = map->list[k].txPort;
+              portList->list[idx++].value = subOntime;
 
               //If subOfftime is non-zero, follow it immediately after ontime with 0x00 as an antenna number.
 #if defined(TMR_ENABLE_BACKGROUND_READS)|| defined(SINGLE_THREAD_ASYNC_READ)
               if((reader->continuousReading) && (reader->readParams.asyncOffTime))
               {
-                SETU8 (msg, *pI, 0x00);
-                SETU16(msg, *pI, subOfftime);
+                portList->list[idx].port  = 0x00;
+                portList->list[idx++].value = subOfftime;
               }
 #endif
             }
@@ -977,75 +741,77 @@ setAntennaReadTimeHelper(struct TMR_Reader *reader, uint8_t* msg, uint8_t* pI, T
         ret = TMR_SUCCESS;
         break;
       }
+#ifndef TMR_ENABLE_GEN2_ONLY
     case TMR_READ_PLAN_TYPE_MULTI:
       {
-        for (j=0; j<plan->u.multi.planCount; j++)
+        for (j = 0; j < plan->u.multi.planCount; j++)
         {
           TMR_ReadPlan *subplan;
           subplan = plan->u.multi.plans[j];
+
 		  if(plan->weight != 0)
 		  {
-		    subOntime = (subplan->weight * ontime)/ plan->weight;
-            subOfftime = (subplan->weight * offtime)/ plan->weight;
+		    subOntime = (subplan->weight * onTime)/ plan->weight;
+            subOfftime = (subplan->weight * offTime)/ plan->weight;
 		  }
 		  else
 		  {
-		    subOntime = ontime/ plan->u.multi.planCount;
-            subOfftime = offtime/ plan->u.multi.planCount;
+		    subOntime = onTime/ plan->u.multi.planCount;
+            subOfftime = offTime/ plan->u.multi.planCount;
 		  }
 
-          ret = setAntennaReadTimeHelper(reader, msg, pI, subplan, subOntime, subOfftime);
+          ret = setAntennaReadTimeHelper(reader, subplan, portList, subOntime, subOfftime);
           if (TMR_SUCCESS != ret)
           {
             return ret;
           }
         }
+
         ret = TMR_SUCCESS;
         break;
       }
+#endif /* TMR_ENABLE_GEN2_ONLY */
     default:
       {
         ret = TMR_ERROR_INVALID;
         break;
       }
   }
+
+  portList->len = idx;
   return ret;
 }
 
 TMR_Status
 setAntennaReadTimeList(struct TMR_Reader *reader)
 {
-  uint8_t msg[TMR_SR_MAX_PACKET_SIZE];
-  uint8_t i;
-  TMR_ReadPlan* plan;
-  uint32_t onTime;
+  TMR_PortValueList portList;
+  TMR_PortValue value[TMR_SR_MAX_ANTENNA_PORTS];
+  uint32_t onTime = 0, offTime = 0;
   TMR_Status ret;
 
-  i = 2;
-  SETU8(msg, i, TMR_SR_OPCODE_SET_ANTENNA_PORT);
-  SETU8(msg, i, 7); /* antenna read time option */
-
-  plan = reader->readParams.readPlan;
   if(reader->continuousReading)
   {
 #if defined(TMR_ENABLE_BACKGROUND_READS)|| defined(SINGLE_THREAD_ASYNC_READ)
-    uint32_t asyncOnTime,asyncOffTime;
-    asyncOnTime = reader->readParams.asyncOnTime;
-    asyncOffTime = reader->readParams.asyncOffTime;
-    ret = setAntennaReadTimeHelper(reader, msg, &i, plan, asyncOnTime, asyncOffTime);
+    onTime = reader->readParams.asyncOnTime;
+    offTime = reader->readParams.asyncOffTime;
 #endif
   }
   else
   {
     onTime = reader->readParams.onTime;
-    ret = setAntennaReadTimeHelper(reader, msg, &i, plan, onTime, 0);
   }
+  
+  portList.list = value;
+  portList.max = sizeof(value) / sizeof(value[0]);
+
+  ret = setAntennaReadTimeHelper(reader, reader->readParams.readPlan, &portList, onTime, offTime);
   if (TMR_SUCCESS != ret)
   {
     return ret;
   }
 
-  return TMR_SR_sendCmd(reader, msg, i);
+  return TMR_SR_cmdSetPerAntennaTime(reader, &portList);
 }
 #endif /* TMR_ENABLE_UHF */
 
@@ -1054,74 +820,22 @@ setProtocol(struct TMR_Reader *reader, TMR_TagProtocol protocol)
 {
   TMR_Status ret;
 
+  /* Sent command to the module only if the new protocol requested. */
   if(reader->u.serialReader.currentProtocol != protocol)
   {
-  ret = TMR_SR_cmdSetProtocol(reader, protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-  reader->u.serialReader.currentProtocol = protocol;
-
-#ifdef TMR_ENABLE_UHF
-  if(TMR_SR_MODEL_M3E != reader->u.serialReader.versionInfo.hardware[0])
-  {
-  /* Set extended EPC -- This bit is reset when the protocol changes */
-  if (reader->u.serialReader.extendedEPC)
-  {  
-    ret = TMR_SR_cmdSetReaderConfiguration(reader,
-					   TMR_SR_CONFIGURATION_EXTENDED_EPC,
-                       &reader->u.serialReader.extendedEPC);
+    ret = TMR_SR_cmdSetProtocol(reader, protocol);
     if (TMR_SUCCESS != ret)
     {
       return ret;
     }
-  }
 
-  /* Set enable filtering -- module automatically resets this when protocol is changed */
-  ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ENABLE_READ_FILTER,
-                                           &reader->u.serialReader.enableReadFiltering);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  {
-    /* Set the read filter timeout */
-    uint32_t moduleValue = (TMR_DEFAULT_READ_FILTER_TIMEOUT == reader->u.serialReader.readFilterTimeout) ?
-                                                                0 : reader->u.serialReader.readFilterTimeout;
-    ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_READ_FILTER_TIMEOUT, &moduleValue);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-    reader->u.serialReader.readFilterTimeout = moduleValue;
-  }
-  }
-#endif /* TMR_ENABLE_UHF */
+    reader->u.serialReader.currentProtocol = protocol;
+    reader->tagOpParams.protocol = protocol;
   }
 
   return TMR_SUCCESS;
 }
-#ifdef TMR_ENABLE_UHF
-/**
- * Compare two firmware versions, return true current firmware is higher than refernced firmware.
- * else return false;
- **/
-bool
-compareVersion(TMR_Reader *reader, uint8_t firstByte, uint8_t secondByte, uint8_t thirdByte, uint8_t fourthByte)
-{
-  uint8_t *readerVersion = reader->u.serialReader.versionInfo.fwVersion;
-  uint8_t checkVersion[4];
 
-  checkVersion[0] = firstByte;
-  checkVersion[1] = secondByte;
-  checkVersion[2] = thirdByte;
-  checkVersion[3] = fourthByte;
-
-  return versionCompare(readerVersion, checkVersion);
-}
-#endif /* TMR_ENABLE_UHF */
 /**
  * Compare antenna list in readplans list, return true if antenna
  * list are consistent across the entire set of read plans.
@@ -1184,36 +898,39 @@ TMR_Status
 prepForSearch(TMR_Reader *reader, TMR_ReadPlan *rp)
 {
   TMR_Status ret = TMR_SUCCESS;
+
+  if(NULL == reader->u.serialReader.txRxMap)
+  {
+    ret = initTxRxMapFromPorts(reader);
+    if (TMR_SUCCESS != ret)
+    {
+      return ret;
+    }
+  }
+
   switch (rp->type)
   {
     case TMR_READ_PLAN_TYPE_SIMPLE:
     {
-      TMR_uint8List *antennaList;
-      antennaList = &(rp->u.simple.antennas);
-      if (reader->isAntennaSet)
+      /* Set the antenna list only if not set already. */
+      if (reader->isAntennaSet == false)
       {
-        if (antennaList->len == 0)
-        {
-#ifdef TMR_ENABLE_UHF
-          if(!reader->isPerAntTimeSet)
-#endif /* TMR_ENABLE_UHF */
-          {
-            ret = autoDetectAntennaList(reader);
-          }
-        }
-        else
+        TMR_uint8List *antennaList = &(rp->u.simple.antennas);
+        if (antennaList->len)
         {
           ret = setAntennaList(reader, antennaList);
         }
 	  }
       break;
     }
+#ifndef TMR_ENABLE_GEN2_ONLY
     case TMR_READ_PLAN_TYPE_MULTI:
     {
 #ifdef TMR_ENABLE_UHF
-      if((validateParams(rp)) && (reader->featureFlags & TMR_READER_FEATURES_FLAG_ANTENNA_READ_TIME))
+      if(validateParams(rp))
       {
-        if (reader->isAntennaSet)
+        /* Set the antenna list only if not set already. */
+        if (reader->isAntennaSet == false)
         {
           ret = setAntennaReadTimeList(reader);
         }
@@ -1225,13 +942,10 @@ prepForSearch(TMR_Reader *reader, TMR_ReadPlan *rp)
       {
         TMR_uint8List *antennaList;
         antennaList = &(rp->u.multi.plans[0]->u.simple.antennas);
-        if (reader->isAntennaSet)
+        /* Set the antenna list only if not set already. */
+        if (reader->isAntennaSet == false)
         {
-          if (antennaList->len == 0)
-          {
-            ret = autoDetectAntennaList(reader);
-          }
-          else
+          if (antennaList->len)
           {
             ret = setAntennaList(reader, antennaList);
           }
@@ -1239,11 +953,15 @@ prepForSearch(TMR_Reader *reader, TMR_ReadPlan *rp)
       }
       else
       {
-        reader->dutyCycle = false;
+        /* Comes in this case when all the parametes of the read plans are non-matching.
+         * Pseudo async read.
+         */
         ret = TMR_ERROR_UNSUPPORTED;
       }
         break;
     }
+#endif /* TMR_ENABLE_GEN2_ONLY */
+
     default:
       ret = TMR_ERROR_INVALID;
       break;
@@ -1275,12 +993,14 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
   TMR_Status ret = TMR_SUCCESS;
   TMR_SR_SerialReader *sr;
   TMR_SR_MultipleStatus multipleStatus = {0};
-  uint32_t elapsed_tagop;
-  uint32_t count, elapsed;
+  uint32_t count;
   uint32_t readTimeMs, starttimeLow, starttimeHigh;
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
   uint32_t prevElapsed = 0;
-#ifdef TMR_ENABLE_BACKGROUND_READS
+  uint32_t elapsed_tagop, elapsed;
   uint32_t sleepTime;
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+#ifdef TMR_ENABLE_BACKGROUND_READS
   reader->tagFetchTime = 0;
 #endif /* TMR_ENABLE_BACKGROUND_READS */
   sr = &reader->u.serialReader;
@@ -1288,6 +1008,23 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
   /* The ontime passed in TMR_read() function through codelet is being collected in 'timeoutMs' variable.
    * Here assigning this value to onTime variable of readParams structure. Which will be ussed in setAntennaReadTimeList() function.*/
   reader->readParams.onTime = timeoutMs;
+
+#ifdef TMR_ENABLE_HF_LF
+  if (reader->isProtocolDynamicSwitching)
+  {
+    /* Dynamic protocol switching is supported only for M3e.
+     * Sync read and multi RP does not support dynamic switching.
+     */
+    if ((TMR_READ_PLAN_TYPE_MULTI == rp->type) ||
+        (!reader->continuousReading))
+    {
+      reader->isProtocolDynamicSwitching = false;
+      return TMR_ERROR_UNSUPPORTED;
+    }
+  }
+#endif /* TMR_ENABLE_HF_LF */
+
+#ifndef TMR_ENABLE_GEN2_ONLY
   if (TMR_READ_PLAN_TYPE_MULTI == rp->type)
   {
     int i;
@@ -1315,93 +1052,73 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
     }
     
     if (((0 < rp->u.multi.planCount) &&
-         (rp->u.multi.plans[0]->type == TMR_READ_PLAN_TYPE_SIMPLE)
-#ifdef TMR_ENABLE_UHF
-         && (isM6eFamily(sr) || (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
-         ) || (true == reader->continuousReading)
-       )
+         (rp->u.multi.plans[0]->type == TMR_READ_PLAN_TYPE_SIMPLE))
+         || (true == reader->continuousReading))
     {
-      TMR_SR_SearchFlag antennas;
-
-      if (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0])
-      {
-        antennas  = TMR_SR_SEARCH_FLAG_CONFIGURED_ANTENNA;
-      }
-      else
-      {
-        antennas  = TMR_SR_SEARCH_FLAG_CONFIGURED_LIST;
-        antennas |= ((reader->continuousReading)? TMR_SR_SEARCH_FLAG_TAG_STREAMING : 0);
-      }
-
       ret = prepForSearch(reader, rp);
-      reader->isAntennaSet = false;
-      /* If this read plan is not simple enough to pass to the module,
-       * then drop down to the next clause, which will break it down
-       * recursively. */
-      if (TMR_ERROR_UNSUPPORTED == ret)
+      if (TMR_SUCCESS == ret)
       {
-        reader->continuousReading = false; 
-        goto handle_complex_read_plan;
-      }
-      /* But if this is an actual error, just throw it. */
-      if (TMR_SUCCESS != ret)
-      {
+        /* At this point antenna list is already set,
+         * which is one time configuration.
+         * Make the variable true to not set antenna list again,
+         * until next paramset of the read plan.
+         */
+        reader->isAntennaSet = true;
+
+        /* Cache search timeout for later call to streaming receive */
+        sr->searchTimeoutMs = timeoutMs;
+
+        /**
+         * take the time stamp only in case of sync read,
+         * async read does not depend on this
+         */
+        if (!reader->continuousReading)
+        {
+          /* Cache the read time so it can be put in tag read data later */
+          tm_gettime_consistent(&starttimeHigh, &starttimeLow);
+          sr->readTimeHigh = starttimeHigh;
+          sr->readTimeLow = starttimeLow;
+          sr->lastSentTagTimestampHigh = starttimeHigh;
+          sr->lastSentTagTimestampLow = starttimeLow;
+        }
+
+        ret = TMR_SR_cmdMultipleProtocolSearch(reader, TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE,
+                                                 protocolList, reader->userMetadataFlag,
+                                                 TMR_SR_SEARCH_FLAG_CONFIGURED_LIST,
+                                                 filters, (uint16_t)timeoutMs, &count);
+
+        if (NULL != tagCount)
+        {
+          *tagCount += count;
+        }
         return ret;
       }
 
-      /* Cache search timeout for later call to streaming receive */
-      sr->searchTimeoutMs = timeoutMs;
-
-      /**
-       * take the time stamp only in case of sync read,
-       * async read does not depend on this
-       **/
-      if (!reader->continuousReading)
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
+      if (TMR_ERROR_UNSUPPORTED == ret)
       {
-        /* Cache the read time so it can be put in tag read data later */
-        tm_gettime_consistent(&starttimeHigh, &starttimeLow);
-        sr->readTimeHigh = starttimeHigh;
-        sr->readTimeLow = starttimeLow;
-        sr->lastSentTagTimestampHigh = starttimeHigh;
-        sr->lastSentTagTimestampLow = starttimeLow;
+        /* If this read plan is not simple enough to pass to the module,
+         * then drop down to the next clause, which will break it down
+         * recursively.
+         */
+        reader->continuousReading = false;
       }
-
-      if(reader->isM6eVariant)
+      else
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
       {
-        bool value;
-        value = (reader->continuousReading) ? false : true;
-        
-        if ((sr->enableReadFiltering != value)  &&
-            (sr->userEnableReadFiltering == false))
+        if (TMR_SUCCESS != ret)
         {
-          ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ENABLE_READ_FILTER, &value);
-          if (TMR_SUCCESS != ret)
-          {
-            return ret;
-          }
-          reader->u.serialReader.enableReadFiltering = value;
+          /* But if this is an actual error, just throw it. */
+          return ret;
         }
       }
-
-      ret = TMR_SR_cmdMultipleProtocolSearch(reader, 
-          TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE,
-		  protocolList, reader->userMetadataFlag,
-          antennas,
-          filters,
-          (uint16_t)timeoutMs, &count);
-
-      if (NULL != tagCount)
-      {
-        *tagCount += count;
-      }
-      return ret;
     }
-
   }
- handle_complex_read_plan:
+#endif /* TMR_ENABLE_GEN2_ONLY */
 
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
   if (TMR_READ_PLAN_TYPE_SIMPLE == rp->type)
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
   {
     reader->triggerRead = rp->u.simple.triggerRead.enable;
 #ifdef TMR_ENABLE_UHF
@@ -1412,6 +1129,8 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
     reader->isStopNTags = rp->u.simple.stopOnCount.stopNTriggerStatus;
     reader->numberOfTagsToRead = rp->u.simple.stopOnCount.noOfTags;
   }
+#ifndef TMR_ENABLE_GEN2_ONLY
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
   else if (TMR_READ_PLAN_TYPE_MULTI == rp->type)
   {
     uint32_t subTimeout = 0, asyncOffTime = 0;
@@ -1442,7 +1161,6 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
         }
       }
 
-      reader->isAntennaSet = true;
       ret = TMR_SR_read_internal(reader, subTimeout, tagCount, 
         rp->u.multi.plans[i]);
       if (TMR_SUCCESS != ret && TMR_ERROR_NO_TAGS_FOUND != ret)
@@ -1452,11 +1170,11 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
     }
     return ret;
   }
-  else
-  {
-    return TMR_ERROR_INVALID;
-  }
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+#endif /* TMR_ENABLE_GEN2_ONLY */
 
+  /* Set antenna list only if it is not set already. */
+  if (reader->isAntennaSet == false)
   {
     /* At this point we're guaranteed to have a simple read plan */
     ret = prepForSearch(reader, rp);
@@ -1465,11 +1183,10 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       return ret;
     }
   }
-  reader->isAntennaSet = false;
 
-#ifdef TMR_ENABLE_HF_LF
-  if (!reader->isProtocolDynamicSwitching)
-#endif /* TMR_ENABLE_HF_LF */
+#ifndef TMR_ENABLE_GEN2_ONLY
+  /* Set protocol only for Sync read, as Async read contains protocol in 0x2F command */
+  if (!reader->continuousReading)
   {
     /* Set protocol to that specified by the read plan. */
     ret = setProtocol(reader, rp->u.simple.protocol);
@@ -1478,33 +1195,7 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       return ret;
     }
   }
-#ifdef TMR_ENABLE_HF_LF
-  else
-  {
-    if (!reader->continuousReading)
-    {
-      reader->isProtocolDynamicSwitching = false;
-      return TMR_ERROR_UNSUPPORTED;
-    }
-  }
-#endif /* TMR_ENABLE_HF_LF */
-
-  if(reader->isM6eVariant)
-  {
-    bool value;
-    value = (reader->continuousReading) ? false : true;
-
-    if ((reader->u.serialReader.enableReadFiltering != value) &&
-        (reader->u.serialReader.userEnableReadFiltering == false))
-    {
-      ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ENABLE_READ_FILTER, &value);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      reader->u.serialReader.enableReadFiltering = value;
-    }
-  }
+#endif /* TMR_ENABLE_GEN2_ONLY */
 
   /* Cache the read time so it can be put in tag read data later */
   tm_gettime_consistent(&starttimeHigh, &starttimeLow);
@@ -1515,7 +1206,9 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
 
   /* Cache search timeout for later call to streaming receive */
   sr->searchTimeoutMs = timeoutMs;
+  readTimeMs = timeoutMs;
 
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
   elapsed = tm_time_subtract(tmr_gettime_low(), starttimeLow);
   elapsed_tagop = elapsed;
   
@@ -1529,13 +1222,12 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
   }
 
   while (elapsed <= timeoutMs)
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
   {
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
     prevElapsed = elapsed;    /* Update previous read(22h) elapsed time value */
     readTimeMs = timeoutMs - elapsed;
-    if (readTimeMs > 65535)
-    {
-      readTimeMs = 65535;
-    }
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
 
     if (NULL == rp->u.simple.tagop)
     {
@@ -1543,9 +1235,8 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       {
         TMR_TagProtocolList p;
         TMR_TagProtocolList *protocolList = &p;
-        TMR_TagFilter *filters[TMR_MAX_SERIAL_MULTIPROTOCOL_LENGTH];
-        TMR_TagProtocol protocols[TMR_MAX_SERIAL_MULTIPROTOCOL_LENGTH];
-        TMR_SR_SearchFlag antennas;
+        TMR_TagFilter *filters[1];
+        TMR_TagProtocol protocols[1];
         
         protocolList->len = 1;
         protocolList->max = 1;
@@ -1554,29 +1245,18 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
         protocolList->list[0] = rp->u.simple.protocol;
         filters[0]= rp->u.simple.filter;
 
-       if(TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0])
-       {
-         antennas = (TMR_SR_SearchFlag) (TMR_SR_SEARCH_FLAG_CONFIGURED_LIST | TMR_SR_SEARCH_FLAG_TAG_STREAMING);
-       }
-       else
-       {
-         antennas = TMR_SR_SEARCH_FLAG_CONFIGURED_ANTENNA;
-       }
-
         ret = TMR_SR_cmdMultipleProtocolSearch(reader,
                             TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE,
                             protocolList, reader->userMetadataFlag,
-                            antennas,
+                            TMR_SR_SEARCH_FLAG_CONFIGURED_LIST,
                             filters,
                             (uint16_t)timeoutMs, &count);
       }
       else
       {
         ret = TMR_SR_cmdReadTagMultiple(reader,(uint16_t)readTimeMs,
-          (TMR_SR_SearchFlag)(TMR_SR_SEARCH_FLAG_CONFIGURED_LIST|TMR_SR_SEARCH_FLAG_LARGE_TAG_POPULATION_SUPPORT),
-          rp->u.simple.filter,
-          rp->u.simple.protocol,
-          &count);
+                            TMR_SR_SEARCH_FLAG_CONFIGURED_LIST, 
+                            rp->u.simple.filter, rp->u.simple.protocol, &count);
       }
     }
     else
@@ -1584,19 +1264,16 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       uint8_t msg[256];
       uint8_t i, lenbyte;
 
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
       /* Since this is embedded tagop, removing elapsed time based on
        * continuous reading should not be done 
        */
       readTimeMs = timeoutMs - elapsed_tagop;
-      if (readTimeMs > 65535)
-      {
-        readTimeMs = 65535;
-      }
-
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
       i = 2;
      
       /**
-       * add the tagoperation
+       * add the tag operation
        **/
       ret = TMR_SR_addTagOp(reader, rp->u.simple.tagop, rp, msg, &i, readTimeMs, &lenbyte);
       if (TMR_SUCCESS != ret)
@@ -1614,16 +1291,18 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       reader->u.serialReader.tagopSuccessCount += multipleStatus.successCount;
       reader->u.serialReader.tagopFailureCount += multipleStatus.failureCount;
     }
+
+    // Error Handling
     if (TMR_ERROR_NO_TAGS_FOUND == ret)
     {
       count = 0;
       ret = TMR_SUCCESS;
     }
-    else if ((TMR_ERROR_TM_ASSERT_FAILED == ret) ||
-             (TMR_ERROR_TIMEOUT == ret))
+    else if ((TMR_ERROR_TM_ASSERT_FAILED == ret) || (TMR_ERROR_TIMEOUT == ret))
 	{
 	  return ret;
 	}
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
 #ifdef TMR_ENABLE_BACKGROUND_READS
     else if((reader->fetchTagReads) && (TMR_ERROR_TAG_ID_BUFFER_FULL == ret))
     {
@@ -1638,6 +1317,7 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       }
     }
 #endif /* TMR_ENABLE_BACKGROUND_READS */
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
     else if (TMR_SUCCESS != ret)
     {
       uint16_t remainingTagsCount;
@@ -1667,7 +1347,9 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
     if (reader->continuousReading)
     {
       sr->tagsRemaining = 1;
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
       break;
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
     }
     else if (reader->isStopNTags)
     {
@@ -1678,13 +1360,18 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       isMultiSelectEnabled = false;
       isEmbeddedTagopEnabled = false;
 #endif /* TMR_ENABLE_UHF */
+
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
       break;
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
     }
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
     else
     {  
       elapsed = tm_time_subtract(tmr_gettime_low(), starttimeLow);
       elapsed += prevElapsed;
     }
+
 #ifdef TMR_ENABLE_BACKGROUND_READS
     if(reader->fetchTagReads)
     {
@@ -1703,15 +1390,7 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
       reader->backgroundRunning = true;
       pthread_mutex_unlock(&reader->backgroundLock);
 
-      /** 
-       * On M5e and its variants, streaming is not supported
-       * So still, retain the pseudo-async mechanism
-       * Also, when asyncOffTime is non-zero the API should fallback to 
-       * pseudo async mode.
-       */
-
       end = tmr_gettime();
-
       while (TMR_SUCCESS == TMR_SR_hasMoreTags(reader))
       {
         TMR_TagReadData trd;
@@ -1755,15 +1434,23 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
         return ret;
       }
       clearTagBuffer = false;
-      isClearTagBufferCmdSent = true;
       tm_gettime_consistent(&starttimeHigh, &starttimeLow);
     }
 #endif
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+
 #ifdef TMR_ENABLE_UHF
-    isMultiSelectEnabled = false;
-    isEmbeddedTagopEnabled = false;
+#if (!TMR_ENABLE_PSEUDO_ASYNC_READ)
+    if (!reader->continuousReading)
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
+    {
+      isMultiSelectEnabled = false;
+      isEmbeddedTagopEnabled = false;
+    }
 #endif /* TMR_ENABLE_UHF */
   }
+
+#if TMR_ENABLE_PSEUDO_ASYNC_READ
 #ifdef TMR_ENABLE_BACKGROUND_READS
   if((reader->fetchTagReads) && (reader->subOffTime))
   {
@@ -1778,51 +1465,8 @@ TMR_SR_read_internal(struct TMR_Reader *reader, uint32_t timeoutMs,
     }
   }
 #endif /* TMR_ENABLE_BACKGROUND_READS */
-  return ret;
-}
+#endif /* TMR_ENABLE_PSEUDO_ASYNC_READ */
 
-/* Reset reader stats (unless command not supported by reader)
- */
-static
-TMR_Status
-_resetReaderStats(TMR_Reader *reader, TMR_Reader_StatsFlag statFlags)
-{
-  TMR_Status ret;
-
-  if ((NULL != reader->pSupportsResetStats) && (false == *(reader->pSupportsResetStats)))
-  {
-    /* Command not supported, just skip it */
-    ret = TMR_SUCCESS;
-  }
-  else
-  {
-    ret = TMR_SR_cmdResetReaderStats(reader, statFlags);
-
-    /* Initialize reader->pSupportsResetStats, if necessary*/
-    if (NULL == reader->pSupportsResetStats)
-    {
-      switch (ret)
-      { 
-      case TMR_SUCCESS:
-        reader->_storeSupportsResetStats = true;
-        break;
-      case TMR_ERROR_MSG_WRONG_NUMBER_OF_DATA:
-      case TMR_ERROR_INVALID_OPCODE:
-      case TMR_ERROR_UNIMPLEMENTED_OPCODE:
-      case TMR_ERROR_UNIMPLEMENTED_FEATURE:
-      case TMR_ERROR_INVALID:
-      case TMR_ERROR_UNIMPLEMENTED:
-      case TMR_ERROR_UNSUPPORTED:
-      case TMR_ERROR_UNSUPPORTED_READER_TYPE:
-        /* If command unsupported, make a note not to do it again then
-         * proceed normally */
-        reader->_storeSupportsResetStats = false;
-        ret = TMR_SUCCESS;
-        break;
-      }
-      reader->pSupportsResetStats = &(reader->_storeSupportsResetStats);
-    }
-  }
   return ret;
 }
 
@@ -1836,54 +1480,12 @@ TMR_SR_read(struct TMR_Reader *reader, uint32_t timeoutMs, int32_t *tagCount)
   {
     return TMR_ERROR_INVALID_VALUE;
   }
-
-  /**
-   * Reset the reader statistics at the beginning of every search,
-   * currently reader statistics only supports in m6e.. 
-   * TO DO: Enable this for other readers in future.
-   */ 
-  if(!isStatsCmdSent)
-  {
-    if (reader->curStatsFlag != reader->userStatsFlag)
-    {
-      ret = _resetReaderStats(reader, reader->userStatsFlag);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-    }
-    reader->curStatsFlag = reader->userStatsFlag;
-    isStatsCmdSent = true;
-  }
-
-  if ((!reader->continuousReading) && (!isClearTagBufferCmdSent))
-  {
-    /**
-    * In case of sync read only
-    * clear tag buffer
-    */
-    ret = TMR_SR_cmdClearTagBuffer(reader);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-  }
-
   reader->u.serialReader.tagsRemaining = 0;
 
-#ifdef TMR_ENABLE_BACKGROUND_READS
-  if (false == reader->backgroundEnabled)
-  /**
-   * if TMR_ENABLE_BACKGROUND_READS is not defined, then
-   * only sync read is possible. (Continuous and pseudo async reads
-   * are not available)
-   **/
-#endif
-  {
-    /* If sync read, then reset tagop result count here */
-    reader->u.serialReader.tagopSuccessCount = 0;
-    reader->u.serialReader.tagopFailureCount = 0;
-  }
+  /* Reset tagop result count. */
+  reader->u.serialReader.tagopSuccessCount = 0;
+  reader->u.serialReader.tagopFailureCount = 0;
+
   rp = reader->readParams.readPlan;
 
   if (tagCount)
@@ -1902,7 +1504,7 @@ TMR_SR_read(struct TMR_Reader *reader, uint32_t timeoutMs, int32_t *tagCount)
 }
 
 TMR_Status
-verifySearchStatus(TMR_Reader *reader)
+TMR_stopStreaming(TMR_Reader *reader)
 {
   TMR_SR_SerialReader *sr;
   TMR_Status ret;
@@ -1927,6 +1529,7 @@ verifySearchStatus(TMR_Reader *reader)
     {
       if ((0x2F == msg[2]) && (0x02 == msg[5]))
       {
+#if TMR_ENABLE_CRC
 #ifdef TMR_ENABLE_UHF
         bool crcEnable;
         /**
@@ -1948,6 +1551,7 @@ verifySearchStatus(TMR_Reader *reader)
 			reader->u.serialReader.crcEnabled = true;
 		}
 #endif /* TMR_ENABLE_UHF */
+#endif /* TMR_ENABLE_CRC */
         return TMR_SUCCESS;
       }
       else if ((0x2F == msg[2]) && (0x01 == msg[3] && (0x00 == msg[4])))
@@ -2000,7 +1604,7 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
     timeoutMs = sr->searchTimeoutMs;
 
     ret = TMR_SR_receiveMessage(reader, msg, TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE, timeoutMs);
-#ifdef TMR_ENABLE_UHF
+#if TMR_ENABLE_BUF_AUTH_RQST_ERROR_HANDLIG
     if (TMR_ERROR_TAG_ID_BUFFER_AUTH_REQUEST == ret)
     {
       /* Tag password needed to complete tagop.
@@ -2018,7 +1622,11 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
       flags = GETU16AT(msg, bufptr);
       bufptr += 2;
       bufptr++;  /* Skip tag count (always = 1) */
-      TMR_SR_parseMetadataFromMessage(reader, &trd, flags, &bufptr, msg);
+      ret = TMR_SR_parseMetadataFromMessage(reader, &trd, flags, &bufptr, msg);
+      if (ret != TMR_SUCCESS)
+      {
+        return ret;
+      }
       TMR_SR_postprocessReaderSpecificMetadata(&trd, sr);
       trd.reader = reader;
 
@@ -2043,16 +1651,10 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
         return TMR_ERROR_TAG_ID_BUFFER_AUTH_REQUEST;
       }
     }
-#endif /* TMR_ENABLE_UHF */
+#endif /* TMR_ENABLE_BUF_AUTH_RQST_ERROR_HANDLIG */
 
     if ((TMR_SUCCESS != ret) && (TMR_ERROR_TAG_ID_BUFFER_FULL != ret))
     {
-      if((TMR_ERROR_NO_TAGS_FOUND != ret) || ((TMR_ERROR_NO_TAGS_FOUND == ret) && ((0 == msg[1]) || (0x88 == (msg[5] & 0x88))))
-#ifdef TMR_ENABLE_HF_LF
-      || (TMR_SR_MODEL_M3E == reader->u.serialReader.versionInfo.hardware[0])
-#endif /* TMR_ENABLE_HF_LF */
-        )
-      {
         if (msg[5] != 0x04 || msg[2] != 0x2f)
         {
           reader->u.serialReader.isBasetimeUpdated = false;
@@ -2065,19 +1667,9 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
            *  In this case fetch the 4 bytes of Timestamp metadata flag and update the 
            *  basetimestamp.
            */
-          if(0x88 == (msg[5] & 0x88))
-          {
-            sr->elapsedTime = GETU32AT(msg, 12);
-          }
-#ifdef TMR_ENABLE_HF_LF
-          else if (TMR_SR_MODEL_M3E == reader->u.serialReader.versionInfo.hardware[0])
-          {
-            sr->elapsedTime = GETU32AT(msg, 11);
-          }
-#endif /* TMR_ENABLE_HF_LF */
+          sr->elapsedTime = GETU32AT(msg, 12);
           return ret;
         }
-      }
     }
 
     if ((TMR_SUCCESS == ret) && (0 == msg[1]))
@@ -2147,8 +1739,27 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
           //Check if total requested tag count is matching with read tag count.
           if(tagCount >= reader->numberOfTagsToRead)
           {
-            //Total requested tags are read. Send stop read command to the module.
-            TMR_SR_cmdStopReading(reader);
+            /* Can't use "reader->finishedReading" flag here to check as it will be 
+             * updated only after receiving stop read response.
+             *
+             * Checking "hasContinuousReadStarted" & "reader->searchStatus" flags will 
+             * work here as these flags are getting turned-on for read and turned-off when TMR_StopReading() is called.
+             *
+             * Do not send stop read again if sent once for a read command.
+             */
+#ifdef TMR_ENABLE_BACKGROUND_READS
+            if(reader->hasContinuousReadStarted && reader->searchStatus)
+#endif  /* TMR_ENABLE_BACKGROUND_READS */
+            {
+              //Total requested tags are read. Send stop read command to the module.
+              TMR_SR_cmdStopReading(reader);
+
+#ifdef TMR_ENABLE_BACKGROUND_READS
+              //Disable flags.
+              reader->hasContinuousReadStarted = false;
+              reader->searchStatus             = false;
+#endif  /* TMR_ENABLE_BACKGROUND_READS */
+            }
           }
         }
 
@@ -2161,15 +1772,15 @@ TMR_SR_hasMoreTags(struct TMR_Reader *reader)
       return TMR_ERROR_PARSE;
     }
 
+    {
+      uint8_t idx = 0;
 #ifdef TMR_ENABLE_UHF
-    if((isMultiSelectEnabled) || (reader->isReadAfterWrite))
-    {
-      response_type_pos = (0x10 == (msg[6] & 0x10)) ? 11 : 9;
-    }
-    else
+      if ((isMultiSelectEnabled) || (reader->isReadAfterWrite))
+      {
+        idx += 1;
+      }
 #endif /* TMR_ENABLE_UHF */
-    {
-      response_type_pos = (0x10 == (msg[5] & 0x10)) ? 10 : 8;
+      response_type_pos = (0x10 == (msg[5 + idx] & 0x10)) ? (10 + idx) : (8 + idx);
     }
 
     switch (msg[response_type_pos])
@@ -2240,17 +1851,7 @@ TMR_SR_getNextTag(struct TMR_Reader *reader, TMR_TagReadData *read)
   uint8_t *msg;
   uint8_t i;
   uint16_t flags = 0;
-#if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
-  uint32_t timeoutMs;
-  uint8_t subResponseLen = 0;
-  uint8_t crclen = 2 ;
-  uint8_t epclen = 0;
-#endif /* TMR_ENABLE_HF_LF || BARE_METAL */
-
   sr = &reader->u.serialReader;
-#if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
-  timeoutMs = sr->searchTimeoutMs;
-#endif /* TMR_ENABLE_HF_LF || BARE_METAL */
 
   {
     msg = sr->bufResponse;
@@ -2273,82 +1874,61 @@ TMR_SR_getNextTag(struct TMR_Reader *reader, TMR_TagReadData *read)
       }
       else
       {
-        if (reader->u.serialReader.opCode == TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE)
-        {
-          i = 2;
-          SETU8(msg, i, TMR_SR_OPCODE_GET_TAG_ID_BUFFER);
-          SETU16(msg, i, reader->userMetadataFlag);
-          SETU8(msg, i, 0); /* read options */
+        i = 2;
+        SETU8(msg, i, TMR_SR_OPCODE_GET_TAG_ID_BUFFER);
+        SETU16(msg, i, reader->userMetadataFlag);
+        SETU8(msg, i, 0); /* read options */
 
-          ret = TMR_SR_sendCmd(reader, msg, i);
-          if (TMR_SUCCESS != ret)
-          {
-            return ret;
-          }
-          sr->tagsRemainingInBuffer = msg[8];
-          sr->bufPointer = 9;
-        }
-#if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
-        else if (reader->u.serialReader.opCode == TMR_SR_OPCODE_READ_TAG_ID_SINGLE)
+        ret = TMR_SR_sendCmd(reader, msg, i);
+        if (TMR_SUCCESS != ret)
         {
-          TMR_SR_receiveMessage(reader, msg, reader->u.serialReader.opCode, timeoutMs);
-          sr->tagsRemainingInBuffer = (uint8_t)GETU32AT(msg , 9);
-          sr->tagsRemaining = sr->tagsRemainingInBuffer;
-          sr->bufPointer = 13 ;
+          return ret;
         }
-#endif /* TMR_ENABLE_HF_LF || BARE_METAL */
-        else
-        {
-           return TMR_ERROR_INVALID_OPCODE; 
-        }
+        sr->tagsRemainingInBuffer = msg[8];
+        sr->bufPointer = 9;
       }
     }
 
     i = sr->bufPointer;
     if (reader->u.serialReader.opCode == TMR_SR_OPCODE_READ_TAG_ID_MULTIPLE)
     {
+      uint8_t idx = 0;
+
 #ifdef SINGLE_THREAD_ASYNC_READ
 #ifdef TMR_ENABLE_UHF
-     if(isMultiSelectEnabled)
+      if(isMultiSelectEnabled)
       {
-        flags = GETU16AT(msg, reader->continuousReading ? 9 : 6);
+        idx += 1;
         i++;
       }
-      else
 #endif /* TMR_ENABLE_UHF */
-      {
-        flags = GETU16AT(msg, reader->continuousReading ? 8 : 5);
-      }
-#else
-      flags = GETU16AT(msg, reader->continuousReading ? 8 : 5);
-#endif
-      TMR_SR_parseMetadataFromMessage(reader, read, flags, &i, msg);
-      
-    }
-#if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
-    if (reader->u.serialReader.opCode == TMR_SR_OPCODE_READ_TAG_ID_SINGLE)
-    {
-      flags = GETU16AT(msg, i + 6);
-      subResponseLen = msg[i+1];
-      i += 7;
-      TMR_SR_parseMetadataOnly(reader, read, flags, &i, msg);
-      epclen = subResponseLen + 4 - (i - sr->bufPointer) - crclen;
-      read->tag.epcByteCount=epclen;
-      memcpy(&(read->tag.epc), &msg[i], read->tag.epcByteCount);
-      i+=epclen;
-      read->tag.crc = GETU16(msg, i);
-    }
-#endif /* TMR_ENABLE_HF_LF || BARE_METAL */
-    sr->bufPointer = i;
-    
-    
-    TMR_SR_postprocessReaderSpecificMetadata(read, sr);
+#endif /* SINGLE_THREAD_ASYNC_READ */
+      flags = GETU16AT(msg, reader->continuousReading ? (8 + idx) : (5 + idx));
 
+      ret = TMR_SR_parseMetadataFromMessage(reader, read, flags, &i, msg);
+      if (ret != TMR_SUCCESS)
+      {
+        return ret;
+      }
+    }
+
+    sr->bufPointer = i;
+    TMR_SR_postprocessReaderSpecificMetadata(read, sr);
     sr->tagsRemainingInBuffer--;
 
     if (false == reader->continuousReading)
     {
       sr->tagsRemaining--;
+      if(!sr->tagsRemaining)
+      {
+        /** Clear tag buffer after pulling all the tags */
+        ret = TMR_SR_cmdClearTagBuffer(reader);
+        if (TMR_SUCCESS != ret)
+        {
+          return ret;
+        }
+      }
+
 #ifdef TMR_ENABLE_UHF
       if(sr->tagsRemaining == 0)
       {
@@ -2367,26 +1947,11 @@ TMR_Status
 TMR_SR_writeTag(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                 const TMR_TagData *data)
 {
-  TMR_Status ret;
   TMR_SR_SerialReader *sr;
-
   sr = &reader->u.serialReader;
 
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  if (TMR_TAG_PROTOCOL_GEN2 == reader->tagOpParams.protocol)
-  {  
-    return TMR_SR_cmdWriteGen2TagEpc(reader, filter, sr->gen2AccessPassword, (uint16_t)(sr->commandTimeout), 
-                                 data->epcByteCount, data->epc, 0);
-  }
-  else
-  {
-    return TMR_ERROR_UNIMPLEMENTED;
-  }
+  return TMR_SR_cmdWriteGen2TagEpc(reader, filter, sr->gen2AccessPassword, (uint16_t)(sr->commandTimeout), 
+                                 data->epcByteCount, data->epc, 0, NULL);
 }
 
 
@@ -2462,17 +2027,9 @@ TMR_SR_readTagMemBytes(TMR_Reader *reader, const TMR_TagFilter *target,
                        uint32_t bank, uint32_t byteAddress, 
                        uint16_t byteCount, uint8_t data[])
 {
-  TMR_Status ret;
   TMR_TagReadData read;
   TMR_SR_SerialReader *sr;
-
   sr = &reader->u.serialReader;
-
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
 
   read.data.max = byteCount;
   read.data.list = (uint8_t *)data;
@@ -2517,19 +2074,14 @@ TMR_SR_modifyFlash(TMR_Reader *reader, uint8_t sector, uint32_t address,
    * As only M6e reader and it's variant supports modifying the flash in 
    * application mode.Hence, this check is required.
    */
-  if (isM6eFamily(&reader->u.serialReader))
-  {
-    return TMR_SR_cmdModifyFlashSector(reader, sector, address, password, length,
+  return TMR_SR_cmdModifyFlashSector(reader, sector, address, password, length,
                                        data, offset);
-  }
-  else
-    return TMR_ERROR_UNSUPPORTED;
 }
 
 TMR_Status
 TMR_SR_writeTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                         uint32_t bank, uint32_t address,
-                        uint16_t count, const uint16_t data[])
+                        uint16_t count, const uint16_t data[], TMR_uint8List *response)
 {
   const uint8_t *dataPtr;
 #ifndef TMR_BIG_ENDIAN_HOST
@@ -2541,13 +2093,13 @@ TMR_SR_writeTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
 #endif
 
     return TMR_SR_writeTagMemBytes(reader, filter, bank, address * 2, count * 2,
-                                   dataPtr);
+                                   dataPtr, response);
 }
 
 TMR_Status
 TMR_SR_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                         uint32_t bank, uint32_t address,
-                        uint16_t count, const uint8_t data[])
+                        uint16_t count, const uint8_t data[], TMR_uint8List *response)
 {
   TMR_Status ret;
   TMR_SR_SerialReader *sr;
@@ -2556,12 +2108,6 @@ TMR_SR_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
  
   sr = &reader->u.serialReader;
   TMR_paramGet(reader, TMR_PARAM_GEN2_WRITEMODE, value);
-
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
 
   if (TMR_TAG_PROTOCOL_GEN2 == reader->tagOpParams.protocol)
   {
@@ -2579,38 +2125,38 @@ TMR_SR_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
 
     switch (mode)
     {
-    case TMR_GEN2_WORD_ONLY:
-      return TMR_SR_cmdGEN2WriteTagData(reader, (uint16_t)(sr->commandTimeout),
-        (TMR_GEN2_Bank)bank, address / 2, (uint8_t)count, data,
-        sr->gen2AccessPassword, filter);
-    case TMR_GEN2_BLOCK_ONLY:
-      {
-        uint16_t data16[TMR_SR_MAX_PACKET_SIZE/2];
-        TMR_bytesToWords(count, data, data16);
-        return TMR_SR_cmdBlockWrite(reader,(uint16_t)sr->commandTimeout, (TMR_GEN2_Bank)bank, address / 2, (uint8_t)(count/2), data16, sr->gen2AccessPassword, filter);
-      }
-    case TMR_GEN2_BLOCK_FALLBACK:
-      {
-        uint16_t data16[TMR_SR_MAX_PACKET_SIZE/2];
-        TMR_bytesToWords(count, data, data16);
-        ret =  TMR_SR_cmdBlockWrite(reader,(uint16_t)sr->commandTimeout, (TMR_GEN2_Bank)bank, address / 2, (uint8_t)(count/2), data16, sr->gen2AccessPassword, filter);
-      }
-      if (TMR_SUCCESS == ret)
-      {
-        return ret;
-      }
-      else 
-      {
-        return TMR_SR_cmdGEN2WriteTagData(reader, (uint16_t)(sr->commandTimeout),
-          (TMR_GEN2_Bank)bank, address / 2, (uint8_t)count, data,
-          sr->gen2AccessPassword, filter);
+      case TMR_GEN2_BLOCK_ONLY:
+      case TMR_GEN2_BLOCK_FALLBACK:
+        {
+          uint16_t data16[TMR_SR_MAX_PACKET_SIZE/2];
+          TMR_bytesToWords(count, data, data16);
+          ret = TMR_SR_cmdBlockWrite(reader,(uint16_t)sr->commandTimeout, (TMR_GEN2_Bank)bank, (uint32_t)(address/2), 
+                                      (uint8_t)(count/2), data16, sr->gen2AccessPassword, filter);
 
-      }
-    default: 
-      return TMR_ERROR_INVALID_WRITE_MODE;
+          switch(mode)
+          {
+            case TMR_GEN2_BLOCK_ONLY:
+              return ret;
+            case TMR_GEN2_BLOCK_FALLBACK:
+              {
+                /* If ret != TMR_SUCCESS, go to the next case and execute 
+                 * "TMR_SR_cmdGEN2WriteTagData()" funxtion 
+                 */
+                if (TMR_SUCCESS == ret)
+                {
+                  return ret;
+                }
+              }
+            default:
+              break;
+          }
+        }
+      case TMR_GEN2_WORD_ONLY:
+        return TMR_SR_cmdGEN2WriteTagData(reader, (uint16_t)(sr->commandTimeout), (TMR_GEN2_Bank)bank, 
+                                           (uint32_t)(address >> 1), (uint8_t)count, data, sr->gen2AccessPassword, filter, response);
+      default: 
+        return TMR_ERROR_INVALID_WRITE_MODE;
     }
-
-
   }
 #ifdef TMR_ENABLE_ISO180006B
   else if (TMR_TAG_PROTOCOL_ISO180006B == reader->tagOpParams.protocol)
@@ -2650,7 +2196,6 @@ TMR_SR_readAfterWriteTagMemWords(struct TMR_Reader *reader, uint32_t writeBank,
                                  const TMR_TagFilter *filter, uint32_t readBank,
                                  uint32_t readAddress, uint8_t readLen, TMR_TagReadData *read)
 {
-  TMR_Status ret;
   TMR_SR_SerialReader *sr;
   TMR_GEN2_WriteMode mode;
   const uint8_t *dataPtr;
@@ -2666,13 +2211,6 @@ TMR_SR_readAfterWriteTagMemWords(struct TMR_Reader *reader, uint32_t writeBank,
 
   TMR_paramGet(reader, TMR_PARAM_GEN2_WRITEMODE, &mode);
 
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  if (TMR_TAG_PROTOCOL_GEN2 == reader->tagOpParams.protocol)
   {
     /* Misaligned writes are not permitted */
     if ((writeAddress & 1) || (count & 1))
@@ -2690,26 +2228,14 @@ TMR_SR_readAfterWriteTagMemWords(struct TMR_Reader *reader, uint32_t writeBank,
         return TMR_ERROR_UNIMPLEMENTED_FEATURE;
     }
   }
-  else
-  {
-    return TMR_ERROR_INVALID;
-  }
 }
 
 TMR_Status
 TMR_SR_lockTag(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                TMR_TagLockAction *action)
 {
-  TMR_Status ret;
   TMR_SR_SerialReader *sr;
-
   sr = &reader->u.serialReader;
-
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
 
   if (TMR_TAG_PROTOCOL_GEN2 == reader->tagOpParams.protocol)
   {
@@ -2759,18 +2285,9 @@ TMR_Status
 TMR_SR_killTag(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                const TMR_TagAuthentication *auth)
 {
-  TMR_Status ret;
   TMR_SR_SerialReader *sr;
-
   sr = &reader->u.serialReader;
 
-  ret = setProtocol(reader, reader->tagOpParams.protocol);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  if (TMR_TAG_PROTOCOL_GEN2 == reader->tagOpParams.protocol)
   {
     if (TMR_AUTH_TYPE_GEN2_PASSWORD != auth->type)
     {
@@ -2782,10 +2299,6 @@ TMR_SR_killTag(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                              (uint16_t)(sr->commandTimeout),
                              auth->u.gen2Password,
                              filter);
-  }
-  else
-  {
-    return TMR_ERROR_UNIMPLEMENTED;
   }
 }
 #endif /* TMR_ENABLE_UHF */
@@ -2848,163 +2361,201 @@ TMR_Status
 TMR_SR_firmwareLoad(struct TMR_Reader *reader, void *cookie,
                     TMR_FirmwareDataProvider provider)
 {
-  static const uint8_t magic[] =
-    { 0x54, 0x4D, 0x2D, 0x53, 0x50, 0x61, 0x69, 0x6B, 0x00, 0x00, 0x00, 0x02 };
-
+  static const uint8_t magic[] = { 0x54, 0x4D, 0x2D, 0x53, 0x50, 0x61, 0x69, 0x6B};
   TMR_Status ret;
-  uint8_t buf[256];
-  uint16_t packetLen, packetRemaining, size, offset;
-  uint32_t len, rate, address, remaining;
+  uint8_t buf[256], FLASH_APP_SECTOR = 0x02,fwUpdateCnt=0;
+  uint16_t packetLen = 0, packetRemaining, size, offset;
+  uint32_t len, rate, address, remaining, sector, pwd_writeFlash;
   TMR_SR_SerialReader *sr = &reader->u.serialReader;
-  TMR_SR_SerialTransport *transport;
-  transport = &sr->transport;
-  remaining = numberof(magic) + 4;
-  offset = 0;
-  
-  while (remaining > 0)
+
+  while (1)
   {
-    size = (uint16_t)remaining;
-    if (false == provider(cookie, &size, buf + offset))
+    offset = 0;
+    remaining = numberof(magic) + 8;
+    pwd_writeFlash = 0;
+
+    if (remaining > 0)
+    {
+      size = (uint16_t)remaining;
+      if (false == provider(cookie, &size, buf + offset))
+      {
+        // Terminate the loop when end of file is reached.
+        if (fwUpdateCnt >= 1)
+          break;
+        return TMR_ERROR_FIRMWARE_FORMAT;
+      }
+      remaining -= size;
+      offset += size;
+    }
+
+    if (0 != memcmp(buf, magic, numberof(magic)))
     {
       return TMR_ERROR_FIRMWARE_FORMAT;
     }
-    
-    remaining -= size;
-    offset += size;
-  }
 
-  if (0 != memcmp(buf, magic, numberof(magic)))
-  {
-    return TMR_ERROR_FIRMWARE_FORMAT;
-  }
+    sector = GETU32AT(buf, 8);
+    len = GETU32AT(buf, 12);
 
-  len = GETU32AT(buf, 12);
-
-  /* @todo get any params we want to reset */
-  /*
-   * Drop baud to 9600 so we know for sure what it will be after going
-   * back to the bootloader.  (Older firmwares always revert to 9600.
-   * Newer ones keep the current baud rate.)
-   */
-  if (NULL != transport->setBaudRate)
-  {
-    /**
-     * some transport layer does not support baud rate settings.
-     * for ex: TCP transport. In that case skip the baud rate
-     * settings.
-     */ 
-
-    ret = TMR_SR_cmdSetBaudRate(reader, 9600);
-    if (TMR_SUCCESS != ret)
+    if (sector == FLASH_APP_SECTOR)
     {
-      return ret;
-    }
-    ret = transport->setBaudRate(transport, 9600);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-  }
-
-  ret = TMR_SR_cmdBootBootloader(reader);
-  if ((TMR_SUCCESS != ret)
+      ret = TMR_SR_cmdBootBootloader(reader);
+      if ((TMR_SUCCESS != ret)
       /* Invalid Opcode okay -- means "already in bootloader" */
       && (TMR_ERROR_INVALID_OPCODE != ret))
-  {
-    return ret;
-  }
+      {
+        return ret;
+      }
 
-  /*
-   * Wait for the bootloader to be entered. 200ms is enough.
-   */
-  tmr_sleep(200);
+      /*
+      * Wait for the bootloader to be entered. 200ms is enough.
+      */
+      tmr_sleep(200);
 
 #ifdef TMR_ENABLE_UHF
-  /* Bootloader doesn't support wakeup preambles */
-  sr->supportsPreamble = false;
+#if TMR_ENABLE_WAKE_PREAMBLES
+      /* Bootloader doesn't support wakeup preambles */
+      sr->supportsPreamble = false;
+#endif /* TMR_ENABLE_WAKE_PREAMBLES */
 #endif /* TMR_ENABLE_UHF */
 
-  /* Bootloader doesn't support high speed operation */
-  rate = sr->baudRate;
-  if (rate > 115200)
-  {
-    rate = 115200;
-  }
-
-  if (NULL != transport->setBaudRate)
-  {
-    /**
-     * some transport layer does not support baud rate settings.
-     * for ex: TCP transport. In that case skip the baud rate
-     * settings.
-     */ 
-
-    ret = TMR_SR_cmdSetBaudRate(reader, rate);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-    ret = transport->setBaudRate(transport, rate);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-  }
-
-  ret = TMR_SR_cmdEraseFlash(reader, 2, 0x08959121);
-  if (TMR_SUCCESS != ret)
-  {
-    return ret;
-  }
-
-  address = 0;
-  remaining = len;
-  while (remaining > 0)
-  {
-    packetLen = 240;
-    if (packetLen > remaining)
-    {
-      packetLen = (uint16_t)remaining;
-    }
-    offset = 0;
-    packetRemaining = packetLen;
-    while (packetRemaining > 0)
-    {
-      size = packetRemaining;
-      if (false == provider(cookie, &size, buf + offset))
-      {
-        return TMR_ERROR_FIRMWARE_FORMAT;
-      }
-      packetRemaining -= size;
-      offset += size;
-    }
-    ret = TMR_SR_cmdWriteFlashSector(reader, 2, address, 0x02254410,(uint8_t) packetLen,
-                                     buf, 0);
-    if (TMR_SUCCESS != ret)
-    {
-      return ret;
-    }
-    address += packetLen;
-    remaining -= packetLen;
-  }
-  
-  ret = TMR_SR_boot(reader, rate);
-  if(ret != TMR_SUCCESS)
-  {
-    if(ret == TMR_ERROR_AUTOREAD_ENABLED)
-    {
-      ret = verifySearchStatus(reader);
+      rate = sr->baudRate;
+      ret = TMR_SR_cmdEraseFlash(reader, sector, 0x08959121);
       if (TMR_SUCCESS != ret)
       {
         return ret;
       }
-      ret = TMR_SR_boot(reader, rate);
+      pwd_writeFlash = 0x02254410;
     }
-  }
 
+    address = 0;
+    remaining = len;
+    while (remaining > 0)
+    {
+      packetLen = 240;
+      if (packetLen > remaining)
+      {
+        packetLen = (uint16_t)remaining;
+      }
+      offset = 0;
+      packetRemaining = packetLen;
+      while (packetRemaining > 0)
+      {
+        size = packetRemaining;
+        if (false == provider(cookie, &size, buf + offset))
+        {
+          return TMR_ERROR_FIRMWARE_FORMAT;
+        }
+        packetRemaining -= size;
+        offset += size;
+      }
+
+      ret = TMR_SR_cmdWriteFlashSector(reader, sector, address, pwd_writeFlash, (uint8_t)packetLen,buf, 0);
+      if (ret == TMR_ERROR_AUTOREAD_ENABLED)
+      {
+        /* Module is already in application mode when autonomous
+         * read error is thrown.
+         * Stop the read and resend write flash command again.
+         */
+        ret = TMR_stopStreaming(reader);
+        if (TMR_SUCCESS == ret)
+        {
+          ret = TMR_SR_cmdWriteFlashSector(reader, sector, address, pwd_writeFlash, (uint8_t)packetLen, buf, 0);
+        }
+      }
+      if (TMR_SUCCESS != ret)
+      { return ret; }
+
+      address += packetLen;
+      remaining -= packetLen;
+    }
+
+    // If sector is not Application and last packet length is 240 bytes, send an empty buffer writeflash cmd 
+    // to ensure peripheral fw upgrade is successful.
+    if ((sector != FLASH_APP_SECTOR) && (packetLen == 240))
+    {
+      uint8_t *buf = NULL;
+      ret = TMR_SR_cmdWriteFlashSector(reader, FLASH_APP_SECTOR, 0, pwd_writeFlash, (uint8_t)packetLen, buf, 0);
+    }
+
+    if (sector == FLASH_APP_SECTOR)
+    {
+      /* Reset the supported protocol value.
+       * Will be again updated in TMR_SR_cmdBootFirmware().
+       */
+      sr->versionInfo.protocols = 0;
+
+      ret = TMR_SR_boot(reader, rate);
+      if (ret != TMR_SUCCESS)
+      {
+        if (ret == TMR_ERROR_AUTOREAD_ENABLED)
+        {
+          ret = TMR_stopStreaming(reader);
+          if (TMR_SUCCESS != ret)
+          {
+            return ret;
+          }
+          ret = TMR_SR_boot(reader, rate);
+        }
+        else if (ret == TMR_ERROR_FLASH_PERIPH_UPGRADE_BAD_CRC)
+        {
+            fprintf(stderr, "CRC validation of firmware image failed. Proceeding to load firmware, anyway.\n");
+        }
+      }
+    }
+    fwUpdateCnt ++;
+  }
   return ret;
 }
 #endif /* TMR_ENABLE_STDIO */
+
+/**
+ * Function which parses the hardware information bytes and extract the hardware revision
+ * 
+ * @param hwinfoBytes       Hardware information bytes
+ * @param hwinfoLength      Hardware information Length
+ * @param hwRevNumber_char  Variable to store Hw revision
+ */
+void
+getHardwareRevision(uint8_t* hwinfoBytes, uint8_t hwinfoLength, char hwRevNumber_char[])
+{
+  // Typical hardware Information bytes response is classified as below.
+  /* 00(option) 7F(data mask)
+   * 01 02 41 49
+   * 02 02 00 2F
+   * 04 02 73 03
+   * 08 02 00 01
+   * 10(part no key) 09(len) 53 55 42 2D 31 30 30 34 35 (part number data)
+   * 20(hw rev key) 02(rev len) 30 42 (data - rev 0B)
+   * 40(sn key) 13(sn length) 35 30 32 31 31 30 30 34 35 39 30 31 30 30 38 46 46 46 46 (sn data)
+   */
+
+  //skip 2 bytes of option and datamask. Hence start from i = 2.
+
+  uint8_t i;
+
+  for (i = 2; i < hwinfoLength; i++)
+  {
+    int key = hwinfoBytes[i]; // key
+    int len = hwinfoBytes[++i]; // length
+
+    uint8_t data[127]; //data
+    //copy hwinfo to data array
+    memcpy(data, (hwinfoBytes + i + 1), len);
+    i += len; //skipping data of len bytes
+    // 0x20 key indicates, it is Hardware revision
+    if (key == 0x20)
+    {
+      uint8_t hwRevLength = len;
+      int j;
+      for (j = 0; j < hwRevLength; j++)
+      {
+        hwRevNumber_char[j] = (char)data[j];
+      }
+      hwRevNumber_char[j] = '\0';
+      break;
+    }
+  }
+}
 
 static TMR_Status
 getHardwareInfo(struct TMR_Reader *reader, void *value)
@@ -3012,12 +2563,31 @@ getHardwareInfo(struct TMR_Reader *reader, void *value)
   //TMR_Status ret;
   //uint8_t buf[127];
   char tmp[255];
+  char  rev[8] = " Rev ";
+  char hwRevStr[8] = " ";
+  uint8_t hwinfoBytes[TMR_HWINFO_SIZE];
+  uint8_t hwinfoLength;
   //uint8_t count;
   TMR_SR_VersionInfo *info;
+
+  hwinfoLength = TMR_HWINFO_SIZE;
+
+  //Get Hw Info
+  TMR_SR_cmdGetHardwareVersion(reader, 0, 0, &hwinfoLength, hwinfoBytes);
 
   info = &reader->u.serialReader.versionInfo;
 
   TMR_hexDottedQuad(info->hardware, tmp);
+
+  //Concatenate " Rev " string to Hw version
+  strncat(tmp, rev, (int)strlen(rev));
+
+  //Extract Hw Revision from Hw Info
+  getHardwareRevision(hwinfoBytes, hwinfoLength, hwRevStr);
+
+  //Concatenate "Hw Revision" to " Rev " string
+  strncat(tmp, hwRevStr, (int)strlen(hwRevStr));
+
   /**
    * Commented below code to fix the Bug#2117
    */
@@ -3042,12 +2612,13 @@ static TMR_Status
 getSerialNumber(struct TMR_Reader *reader, void *value)
 {
   /* See http://trac/swtree/changeset/6498 for previous implementation */
+#define TMR_BUFFER_SIZE 32
   TMR_Status ret;
-  uint8_t buf[127];
+  uint8_t buf[TMR_BUFFER_SIZE];
   uint8_t count, tmplen = 0;
-  char tmp[127];
+  char tmp[TMR_BUFFER_SIZE];
 
-  count = 127;
+  count = TMR_BUFFER_SIZE;
   ret = TMR_SR_cmdGetHardwareVersion(reader, 0, 0x40, &count, buf);
   if (count == 0)
   {
@@ -3096,20 +2667,54 @@ getSerialNumber(struct TMR_Reader *reader, void *value)
 static TMR_Status
 TMR_SR_cmdSetPerAntennaTime(struct TMR_Reader *reader, const TMR_PortValueList *list)
 {
+  TMR_Status ret = TMR_SUCCESS;
   uint8_t msg[TMR_SR_MAX_PACKET_SIZE];
-  uint8_t j, i;
+  uint8_t i, j, k;
+  TMR_AntennaMapList* map = NULL;
+
+  if (NULL == reader->u.serialReader.txRxMap)
+  {
+    ret = initTxRxMapFromPorts(reader);
+    if (TMR_SUCCESS != ret)
+    {
+      return ret;
+    }
+  }
+  map = reader->u.serialReader.txRxMap;
 
   i = 2;
   SETU8(msg, i, TMR_SR_OPCODE_SET_ANTENNA_PORT);
-  SETU8(msg, i, 7);
+
+  /* Suboption 0x07 is used by old serial command format which contains tx and rx.
+   * New serial command with suboption 0x87 contains only antenna Id.
+   */
+  SETU8(msg, i, (0x07 | ((!reader->u.serialReader.isM6eFamily) << 7)));
 
   for (j = 0; j < list->len; j++)
   {
-    SETU8(msg, i, list->list[j].port);
-    if(list->list[j].value <= 0xFFFF)
+    // If antenna id is 0, it indicates offtime is set by the user.
+    // Do not check for the txrx map for '0' antenna id as it will not be available in txrxmap.
+    if(list->list[j].port != 0)
     {
-      SETS16(msg, i, (int16_t) list->list[j].value);
+      for (k = 0; k < map->len; k++)
+      {
+        if (list->list[j].port == map->list[k].antenna)
+        {
+          SETU8(msg, i, map->list[k].txPort);
+        }
+      }
     }
+    else
+    {
+      SETU8(msg, i, 0);
+    }
+
+    if (list->list[j].value >= 0xFFFF)
+    {
+      return TMR_ERROR_INVALID;
+    }
+
+    SETS16(msg, i, (int16_t)list->list[j].value);
   }
 
   return TMR_SR_sendCmd(reader, msg, i);
@@ -3124,7 +2729,7 @@ TMR_SR_cmdGetPerAntennaTime(struct TMR_Reader *reader, TMR_PortValueList *list)
 
   i = 2;
   SETU8(msg, i, TMR_SR_OPCODE_GET_ANTENNA_PORT);
-  SETU8(msg, i, 7);
+  SETU8(msg, i, 7); /* antenna read time option */
 
   ret = TMR_SR_sendCmd(reader, msg, i);
   if (TMR_SUCCESS != ret)
@@ -3150,23 +2755,21 @@ setPortValues(struct TMR_Reader *reader, const TMR_PortValueList *list,
   TMR_Status ret;
   TMR_SR_PortPowerAndSettlingTime ports[TMR_SR_MAX_ANTENNA_PORTS];
   uint8_t count;
-  uint16_t i, j, k;
+  uint16_t i, j;
   TMR_AntennaMapList *map;
-  map = reader->u.serialReader.txRxMap;
 
-  count = numberof(ports);
-  reader->extendedAntOption = offset + 1;
-  ret = TMR_SR_cmdGetAntennaPortPowersAndSettlingTime(reader, &count, ports);
-  if (TMR_SUCCESS != ret)
+  if(NULL == reader->u.serialReader.txRxMap)
   {
-    return ret;
+    ret = initTxRxMapFromPorts(reader);
+    if (TMR_SUCCESS != ret)
+    {
+      return ret;
+    }
   }
 
-  /* If a value is left out, 0 is assumed */
-  /*for (j = 0; j < count; j++)
-  {
-    *(&ports[j].readPower + offset) = 0;
-  }*/
+  map = reader->u.serialReader.txRxMap;
+  count = map->len;
+  reader->extendedAntOption = offset + 1;
 
   /* 
    * For each settling time in the user's list, try to find an
@@ -3174,40 +2777,22 @@ setPortValues(struct TMR_Reader *reader, const TMR_PortValueList *list,
    */
   for (i = 0; i < list->len; i++)
   {
-    for (k = 0 ; k < count ; k++)
-    {
-      if (map->list[k].antenna == list->list[i].port)
-      {
-        break;
-      }
-    }
     for (j = 0 ; j < count ; j++)
     {
-      if ( map->list[k].txPort == ports[j].port)
+      if (map->list[j].antenna == list->list[i].port)
       {
         break;
       }
     }
     if (j == count)
     {
-      if (count == TMR_SR_MAX_ANTENNA_PORTS)
-      {
-        return TMR_ERROR_TOO_BIG;
-      }
-      ports[j].port =  map->list[k].txPort;
-      ports[j].readPower = 0;
-      ports[j].writePower = 0;
-      ports[j].settlingTime = 0;
-      count++;
+      return TMR_ERROR_NO_ANTENNA;
     }
-
-    if (list->list[i].value > 32767 || list->list[i].value < -32768)
-    {
-      return TMR_ERROR_ILLEGAL_VALUE;
-    }
+    ports[i].port =  map->list[j].txPort;
     *(&ports[j].readPower + offset) = (int16_t)(list->list[i].value);
   }
-  return TMR_SR_cmdSetAntennaPortPowersAndSettlingTime(reader, count, ports);
+
+  return TMR_SR_cmdSetAntennaPortPowersAndSettlingTime(reader, list->len, ports);
 }
 
 /* See comment before setPortValues() for the meaning of offset */
@@ -3220,6 +2805,15 @@ getPortValues(struct TMR_Reader *reader, TMR_PortValueList *list, int offset)
   uint16_t i, j, k;
   TMR_AntennaMapList *map;
  
+  if(NULL == reader->u.serialReader.txRxMap)
+  {
+    ret = initTxRxMapFromPorts(reader);
+    if (TMR_SUCCESS != ret)
+    {
+      return ret;
+    }
+  }
+
   map = reader->u.serialReader.txRxMap;
 
   count = numberof(ports);
@@ -3232,14 +2826,6 @@ getPortValues(struct TMR_Reader *reader, TMR_PortValueList *list, int offset)
 
   for (i = 0, j = 0; i < count; i++)
   {
-    if ((0 == *(&ports[i].readPower + offset)  && ((TMR_SR_MODEL_MICRO != reader->u.serialReader.versionInfo.hardware[0])
-      || (TMR_SR_MODEL_M6E_NANO != reader->u.serialReader.versionInfo.hardware[0]))) 
-        || (((TMR_SR_MODEL_MICRO == reader->u.serialReader.versionInfo.hardware[0]) ||
-        (TMR_SR_MODEL_M6E_NANO == reader->u.serialReader.versionInfo.hardware[0]))
-          && (-32768 ==  *(&ports[i].readPower + offset))))
-    {
-      continue;
-    }
     if (j < list->max)
     {
       for (k = 0 ; k < count ; k++)
@@ -3249,10 +2835,15 @@ getPortValues(struct TMR_Reader *reader, TMR_PortValueList *list, int offset)
           break;
         }
       }
-      list->list[j].port = map->list[k].antenna;
-      list->list[j].value = (int32_t)*(&ports[i].readPower + offset);
+
+      /* Report only valid port values. */
+      if(k != count)
+      {
+        list->list[j].port = map->list[k].antenna;
+        list->list[j].value = (int32_t)*(&ports[i].readPower + offset);
+        j++;
+      }
     }
-    j++;
   }
   list->len = (uint8_t)j;
 
@@ -3266,10 +2857,11 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
   TMR_Status ret;
   TMR_SR_ProtocolConfiguration protokey;
   TMR_SR_SerialReader *sr;
+#if ENABLE_TMR_PARAM_BAUDRATE
   TMR_SR_SerialTransport *transport;
-  TMR_SR_Configuration readerkey;
+#endif /* ENABLE_TMR_PARAM_BAUDRATE */
+  TMR_SR_Configuration readerkey = 0;
 #ifdef TMR_ENABLE_UHF
-  readerkey = TMR_SR_CONFIGURATION_TRANSMIT_POWER_SAVE;
   protokey.protocol = TMR_TAG_PROTOCOL_GEN2;
 #endif /* TMR_ENABLE_UHF */
   ret = TMR_SUCCESS;
@@ -3287,50 +2879,86 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
 
   switch (key)
   {
-  case TMR_PARAM_REGION_ID:
-    sr->regionId = *(TMR_Region*)value;
-    if (reader->connected)
-    {
-      ret = TMR_SR_cmdSetRegion(reader, sr->regionId);
-    }
-    break;
-
-  case TMR_PARAM_URI:
-  case TMR_PARAM_PRODUCT_GROUP_ID:
-  case TMR_PARAM_PRODUCT_GROUP:
-  case TMR_PARAM_PRODUCT_ID:
-  case TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT:
-  case TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT:
+    case TMR_PARAM_URI:
+    case TMR_PARAM_PRODUCT_GROUP_ID:
+    case TMR_PARAM_PRODUCT_GROUP:
+    case TMR_PARAM_PRODUCT_ID:
+    case TMR_PARAM_VERSION_HARDWARE:
+    case TMR_PARAM_VERSION_MODEL:
+    case TMR_PARAM_VERSION_SOFTWARE:
+    case TMR_PARAM_RADIO_POWERMAX:
+    case TMR_PARAM_RADIO_POWERMIN:
+    case TMR_PARAM_ANTENNA_PORTLIST:
+    case TMR_PARAM_RADIO_TEMPERATURE:
+    case TMR_PARAM_REGION_SUPPORTEDREGIONS:
+    case TMR_PARAM_ANTENNA_CONNECTEDPORTLIST:
+    case TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS:
+    case TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT:
+    case TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT:
+#ifdef TMR_ENABLE_UHF
+    case TMR_PARAM_ANTENNA_RETURNLOSS:
+    case TMR_PARAM_GEN2_PROTOCOLEXTENSION:
+#endif /* TMR_ENABLE_UHF */
+#ifdef TMR_ENABLE_HF_LF
+    case TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES:
+    case TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES:
+    case TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES:
+    case TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES:
+    case TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES:
+    case TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES:
+    case TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES:
+    case TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES:
+#endif /* TMR_ENABLE_HF_LF */
     {
       ret = TMR_ERROR_READONLY;
       break;
     }
+#if ENABLE_TMR_PARAM_REGION_ID
+    case TMR_PARAM_REGION_ID:
+      {
+        ret = TMR_SR_cmdSetRegion(reader, *(TMR_Region*)value);
+        if(TMR_SUCCESS == ret)
+        {
+          sr->regionId = *(TMR_Region*)value;
+        }
+        break;
+      }
+#endif /*ENABLE_TMR_PARAM_REGION_ID*/ 
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT
   case TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT:
     {
       *(bool *)value ? (reader->streamStats |= TMR_SR_STATUS_ANTENNA) :
         (reader->streamStats &= ~TMR_SR_STATUS_ANTENNA) ;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT */
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT
   case TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT:
     {
       *(bool *)value ? (reader->streamStats |= TMR_SR_STATUS_FREQUENCY) :
         (reader->streamStats &= ~TMR_SR_STATUS_FREQUENCY) ;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT*/
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT
   case TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT:
     {
       *(bool *)value ? (reader->streamStats |= TMR_SR_STATUS_TEMPERATURE) :
         (reader->streamStats &= ~TMR_SR_STATUS_TEMPERATURE) ;
       break;
     }
+#endif /* TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_BAUDRATE
   case TMR_PARAM_BAUDRATE:
   {
     uint32_t rate;
 
     transport = &sr->transport;
     rate = *(uint32_t *)value;
+
+    sr->baudRate = rate;
 
     if (reader->connected)
     {
@@ -3346,18 +2974,14 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
         {
           break;
         }
-        sr->baudRate = rate;
         transport->setBaudRate(transport, sr->baudRate);
       }
     }
-    else
-    {
-      sr->baudRate = rate;
-    }
-    sr->isUserBaudRateSet = true;
+
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_BAUDRATE */ 
+#if ENABLE_TMR_PARAM_PROBEBAUDRATES
   case TMR_PARAM_PROBEBAUDRATES:
   {
     const TMR_uint32List *u32List;
@@ -3378,81 +3002,61 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
     sr->probeBaudRates.len = u32List->len;
     break;
   }
-
+#endif /*ENABLE_TMR_PARAM_PROBEBAUDRATES*/
+#if ENABLE_TMR_PARAM_COMMANDTIMEOUT
   case TMR_PARAM_COMMANDTIMEOUT:
 	{
-      uint32_t val = *(uint32_t*)value;
-	  if (((uint32_t)1<<31) & val)
-	  {
-	    ret = TMR_ERROR_ILLEGAL_VALUE; 
-	  }
-	  else
-	  {
-        sr->commandTimeout = *(uint32_t *)value;
-	  }
+      if (*(int32_t*)value < 0)
+      {
+        ret = TMR_ERROR_INVALID_VALUE;
+        break;
+      }
+      sr->commandTimeout = *(uint32_t *)value;
 	}
     break;
+#endif /* ENABLE_TMR_PARAM_COMMANDTIMEOUT */
+#if ENABLE_TMR_PARAM_TRANSPORTTIMEOUT
   case TMR_PARAM_TRANSPORTTIMEOUT:
     {
-      uint32_t val = *(uint32_t*)value;
-      if (((uint32_t)1<<31) & val)
+      /**
+       * In case user specified the timeout value for connect
+       * Enable the usrTimoutEnable option
+       */
+      if (*(int32_t*)value < 0)
       {
-        ret = TMR_ERROR_ILLEGAL_VALUE; 
+        ret = TMR_ERROR_INVALID_VALUE;
+        break;
       }
-      else
-      {
-        /**
-         * In case user specified the timeout value for connect
-         * Enable the usrTimoutEnable option
-         */
-        sr->transportTimeout = *(uint32_t *)value;
-        sr->usrTimeoutEnable = true;
-      }
+      sr->transportTimeout = *(uint32_t *)value;
+      sr->usrTimeoutEnable = true;
     }
 	break;
+#endif /* ENABLE_TMR_PARAM_TRANSPORTTIMEOUT */
 #ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_RADIO_ENABLEPOWERSAVE:
-	readerkey = TMR_SR_CONFIGURATION_TRANSMIT_POWER_SAVE;
-	break;
+#if ENABLE_TMR_PARAM_RADIO_ENABLESJC
   case TMR_PARAM_RADIO_ENABLESJC:
 	readerkey = TMR_SR_CONFIGURATION_SELF_JAMMER_CANCELLATION;
 	break;
-  case TMR_PARAM_EXTENDEDEPC:
-    readerkey = TMR_SR_CONFIGURATION_EXTENDED_EPC;
-    break;
-
+#endif /*ENABLE_TMR_PARAM_RADIO_ENABLESJC*/
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL
   case TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL:
-    if (isM6eFamily(sr))
     {
       ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_UNIQUE_BY_PROTOCOL, value);
     }
-    else
-    {
-      ret = TMR_ERROR_NOT_FOUND;
-    }
     break;
-    
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL */
+#if ENABLE_TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT
   case TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT:
-    if (isM6eFamily(sr))
     {
       int32_t timeout = (TMR_DEFAULT_READ_FILTER_TIMEOUT == *(int32_t *)value) ? 0 : *(int32_t *)value;
+
       ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_READ_FILTER_TIMEOUT, &timeout);
-      if (TMR_SUCCESS == ret)
-      {
-        reader->u.serialReader.readFilterTimeout = timeout;
-      }
-    }
-    else
-    {
-      ret = TMR_ERROR_NOT_FOUND;
     }
     break;
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT */
 #endif /* TMR_ENABLE_UHF */
-
+#if ENABLE_TMR_PARAM_TAGREADDATA_ENABLEREADFILTER
   case TMR_PARAM_TAGREADDATA_ENABLEREADFILTER:
-#ifdef TMR_ENABLE_UHF
-    if (isM6eFamily(sr) || (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
     {
       ret = TMR_SR_cmdSetReaderConfiguration(reader, TMR_SR_CONFIGURATION_ENABLE_READ_FILTER, value);
       if (TMR_SUCCESS == ret)
@@ -3461,53 +3065,56 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
         reader->u.serialReader.userEnableReadFiltering = true;
       }
     }
-#ifdef TMR_ENABLE_UHF
-    else
-    {
-      ret = TMR_ERROR_READONLY;
-    }
-#endif /* TMR_ENABLE_UHF */
     break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_ENABLEREADFILTER */
+#if ENABLE_TMR_PARAM_RADIO_READPOWER
   case TMR_PARAM_RADIO_READPOWER:
 	ret = TMR_SR_cmdSetReadTxPower(reader, *(int32_t *)value);
 	break;
+#endif /* ENABLE_TMR_PARAM_RADIO_READPOWER */
+#if ENABLE_TMR_PARAM_RADIO_WRITEPOWER
   case TMR_PARAM_RADIO_WRITEPOWER:
     ret = TMR_SR_cmdSetWriteTxPower(reader, *(int32_t *)value);
     break;
+#endif /* ENABLE_TMR_PARAM_RADIO_WRITEPOWER */ 
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_RADIO_PORTREADPOWERLIST
   case TMR_PARAM_RADIO_PORTREADPOWERLIST:
     ret = setPortValues(reader, value, 0);
     break;
-
+#endif /* ENABLE_TMR_PARAM_RADIO_PORTREADPOWERLIST */
+#if ENABLE_TMR_PARAM_RADIO_PORTWRITEPOWERLIST
   case TMR_PARAM_RADIO_PORTWRITEPOWERLIST:
     ret = setPortValues(reader, value, 1);
     break;
-
+#endif /*ENABLE_TMR_PARAM_RADIO_PORTWRITEPOWERLIST*/
+#if ENABLE_TMR_PARAM_ANTENNA_SETTLINGTIMELIST
   case TMR_PARAM_ANTENNA_SETTLINGTIMELIST:
     ret = setPortValues(reader, value, 2);
     break;
-
+#endif /* TMR_PARAM_ANTENNA_SETTLINGTIMELIST */
+#if ENABLE_TMR_PARAM_ANTENNA_CHECKPORT
   case TMR_PARAM_ANTENNA_CHECKPORT:
     readerkey = TMR_SR_CONFIGURATION_SAFETY_ANTENNA_CHECK;
     break;
-
+#endif /* ENABLE_TMR_PARAM_ANTENNA_CHECKPORT */
+#if ENABLE_TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI
   case TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI:
     readerkey = TMR_SR_CONFIGURATION_RECORD_HIGHEST_RSSI;
     break;
-
-  case TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM:
-    readerkey = TMR_SR_CONFIGURATION_RSSI_IN_DBM;
-    break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI */
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA
   case TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA:
     readerkey = TMR_SR_CONFIGURATION_UNIQUE_BY_ANTENNA;
     break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA */
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYDATA
   case TMR_PARAM_TAGREADDATA_UNIQUEBYDATA:
     readerkey = TMR_SR_CONFIGURATION_UNIQUE_BY_DATA;
     break;
-
+#endif /*ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYDATA*/
+#endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_ANTENNA_PORTSWITCHGPOS
   case TMR_PARAM_ANTENNA_PORTSWITCHGPOS:
   {
     const TMR_uint8List *u8list;
@@ -3532,7 +3139,8 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
     
     break;
   }
-#endif /* TMR_ENABLE_UHF */
+#endif /* ENABLE_TMR_PARAM_ANTENNA_PORTSWITCHGPOS */
+#if ENABLE_TMR_PARAM_TRIGGER_READ_GPI
   case TMR_PARAM_TRIGGER_READ_GPI:
     {
       uint8_t portmask;
@@ -3550,13 +3158,23 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
         reader, TMR_SR_CONFIGURATION_TRIGGER_READ_GPIO, &portmask);
       break;
     }
-#ifdef TMR_ENABLE_UHF
+#endif /* ENABLE_TMR_PARAM_TRIGGER_READ_GPI */
+#if ENABLE_TMR_PARAM_ANTENNA_TXRXMAP
   case TMR_PARAM_ANTENNA_TXRXMAP:
   {
     const TMR_AntennaMapList *map;
     TMR_AntennaMapList *mymap;
     uint8_t len;
     uint16_t i, j;
+
+    if(NULL == sr->txRxMap)
+    {
+      ret = initTxRxMapFromPorts(reader);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+    }
 
     map = value;
     mymap = sr->txRxMap;
@@ -3609,7 +3227,10 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
     sr->isTxRxMapSet = true;
     break;
   }
+#endif /* ENABLE_TMR_PARAM_ANTENNA_TXRXMAP */
 
+#ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_REGION_HOPTABLE
   case TMR_PARAM_REGION_HOPTABLE:
   {
     const TMR_uint32List *u32list;
@@ -3619,107 +3240,91 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
     ret = TMR_SR_cmdSetFrequencyHopTable(reader, (uint8_t)u32list->len, u32list->list);
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_REGION_HOPTABLE */
+#if ENABLE_TMR_PARAM_REGION_HOPTIME
   case TMR_PARAM_REGION_HOPTIME:
-    ret = TMR_SR_cmdSetFrequencyHopTime(reader, *(uint32_t *)value);
+    ret = TMR_SR_cmdSetFrequencyHopTableOption(reader, *(uint32_t *)value,
+                                                 TMR_SR_OPCODE_FREQ_HOP_TABLE_OPTION_HOPTIME);
     break;
-
+#endif /*ENABLE_TMR_PARAM_REGION_HOPTIME */
+#if ENABLE_TMR_PARAM_REGION_DWELL_TIME
   case  TMR_PARAM_REGION_DWELL_TIME:
-    if(((*(uint32_t *)value) > TMR_MIN_VALUE) && ((*(uint32_t *)value) <= TMR_MAX_VALUE))
-    {
-      ret = TMR_SR_cmdSetRegionDwellTime(reader, sr->regionId, *(uint16_t *)value);
-    }
-    else
-    {
-      ret = TMR_ERROR_INVALID_VALUE;
-    }
+    ret = TMR_SR_cmdSetRegionDwellTime(reader, sr->regionId, *(uint16_t *)value);
     break;
-
+#endif /*ENABLE_TMR_PARAM_REGION_DWELL_TIME*/
+#if ENABLE_TMR_PARAM_REGION_DWELL_TIME_ENABLE
   case  TMR_PARAM_REGION_DWELL_TIME_ENABLE:
     ret = TMR_SR_cmdSetRegionDwellTimeEnable(reader, sr->regionId, *(bool *)value);
     break;
-
+#endif /*ENABLE_TMR_PARAM_REGION_DWELL_TIME_ENABLE*/
+#if ENABLE_TMR_PARAM_REGION_LBT_THRESHOLD
   case  TMR_PARAM_REGION_LBT_THRESHOLD:
     ret = TMR_SR_cmdSetRegionLbtThreshold(reader, sr->regionId, *(int8_t *)value);
     break;
-
+#endif /*ENABLE_TMR_PARAM_REGION_LBT_THRESHOLD*/
+#if ENABLE_TMR_PARAM_REGION_LBT_ENABLE
   case TMR_PARAM_REGION_LBT_ENABLE:
   {
-    uint32_t hopTable[64];
-    uint8_t count;
-
-    count = numberof(hopTable);
-    ret = TMR_SR_cmdGetFrequencyHopTable(reader, &count, hopTable);
-    if (TMR_SUCCESS != ret)
-    {
-      break;
-    }
-
     ret = TMR_SR_cmdSetRegionLbt(reader, sr->regionId, *(bool *)value);
-    if (TMR_SUCCESS != ret)
-    {
-      break;
-    }
-
-    ret = TMR_SR_cmdSetFrequencyHopTable(reader, count, hopTable);
     break;
   }
+#endif /* ENABLE_TMR_PARAM_REGION_LBT_ENABLE */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_TAGOP_ANTENNA
   case TMR_PARAM_TAGOP_ANTENNA:
   {
-    uint16_t i;
     TMR_AntennaMapList *map;
-    uint8_t antenna;
-    uint8_t txPort, rxPort;
+    uint8_t i, antId = 0;
+
+    if(NULL == sr->txRxMap)
+    {
+      ret = initTxRxMapFromPorts(reader);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+    }
 
     map = sr->txRxMap;
-    antenna = *(uint8_t *)value;
+    antId = *(uint8_t *)value;
 
-    txPort = rxPort = 0;
     for (i = 0; i < map->len && i < map->max; i++)
     {
-      if (map->list[i].antenna == antenna)
+      if (map->list[i].antenna == antId)
       {
-        txPort = map->list[i].txPort;
-        rxPort = map->list[i].rxPort;
-        reader->tagOpParams.antenna = antenna;
+        reader->tagOpParams.antenna = antId;
+        antId = map->list[i].txPort;
         break;
       }
     }
-    if (txPort == 0)
+    if (antId == 0)
     {
       ret = TMR_ERROR_NO_ANTENNA;
     }
     else
     {
-      ret = TMR_SR_cmdSetTxRxPorts(reader, txPort, rxPort);
+      ret = TMR_SR_cmdSetTxRxPorts(reader, antId, 0);
     }
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_TAGOP_ANTENNA */
+#ifndef TMR_ENABLE_GEN2_ONLY
+#if ENABLE_TMR_PARAM_TAGOP_PROTOCOL
   case TMR_PARAM_TAGOP_PROTOCOL:
-    if (0 == ((1 << (*(TMR_TagProtocol *)value - 1)) &
-              sr->versionInfo.protocols))
     {
-      ret = TMR_ERROR_UNSUPPORTED;
-    }
-    else
-    {
-      reader->tagOpParams.protocol = *(TMR_TagProtocol *)value;
-	  if (reader->connected)
-	  {
-	    ret = setProtocol(reader, reader->tagOpParams.protocol);
-		if (TMR_SUCCESS == ret)
-		{
-		  reader->u.serialReader.currentProtocol = reader->tagOpParams.protocol;
+      ret = setProtocol(reader, *(TMR_TagProtocol *)value);
+      if (TMR_SUCCESS == ret)
+      {
+        reader->tagOpParams.protocol = *(TMR_TagProtocol *)value;
 #ifdef TMR_ENABLE_HF_LF
-          reader->isProtocolDynamicSwitching = false;
+        reader->isProtocolDynamicSwitching = false;
 #endif /* TMR_ENABLE_HF_LF */
-        }
-	  }
+      }
+      break;
     }
-    break;
-
+#endif /* ENABLE_TMR_PARAM_TAGOP_PROTOCOL */
+#endif /* TMR_ENABLE_GEN2_ONLY */
+#if ENABLE_TMR_PARAM_READ_PLAN
   case TMR_PARAM_READ_PLAN:
   {
     const TMR_ReadPlan *plan;
@@ -3728,25 +3333,54 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
     plan = value;
     tmpPlan = *plan;
 
-    ret = validateReadPlan(reader, &tmpPlan, 
-                sr->txRxMap, sr->versionInfo.protocols);
+    /* Reset in order to send antenna list for the new RP. */
+    reader->isAntennaSet = false;
+
+    ret = validateReadPlan(reader, &tmpPlan, sr->txRxMap, sr->versionInfo.protocols);
     if (TMR_SUCCESS != ret)
     {
       return ret;
     }
-    
+ 
+    if (TMR_READ_PLAN_TYPE_SIMPLE == plan->type)
+    {
+#ifdef TMR_ENABLE_HF_LF
+      /* Do not set protocol if the protocol list is already set. */
+      if (!reader->isProtocolDynamicSwitching)
+#endif /* TMR_ENABLE_HF_LF */
+      {
+        /* Set protocol to that specified by the read plan. */
+        ret = setProtocol(reader, plan->u.simple.protocol);
+        if (TMR_SUCCESS != ret)
+        {
+          return ret;
+        }
+      }
+
+      /* At this point we're guaranteed to have a simple read plan */
+      ret = prepForSearch(reader, &tmpPlan);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+
+      /* At this point antenna list is already set,
+       * which is one time configuration.
+       * Make the variable true to not set antenna list again,
+       * until next paramset of the read plan.
+       */
+      reader->isAntennaSet = true;
+    }
+
     *reader->readParams.readPlan = tmpPlan;
-    reader->isAntennaSet = true;
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_READ_PLAN */
+#if ENABLE_TMR_PARAM_GPIO_INPUTLIST_OUTPUTLIST
   case TMR_PARAM_GPIO_INPUTLIST:
   case TMR_PARAM_GPIO_OUTPUTLIST:
-#ifdef TMR_ENABLE_UHF
-  if (isM6eFamily(sr) || (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
-  {
-      const TMR_uint8List *u8list;      
+    {
+      const TMR_uint8List *u8list;
       int bit, i, newDirections, pin;
 
       u8list = value;
@@ -3786,35 +3420,9 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       }
       break;
     }
-  case TMR_PARAM_RADIO_POWERMAX:
-  case TMR_PARAM_RADIO_POWERMIN:
-  case TMR_PARAM_REGION_SUPPORTEDREGIONS:
-  case TMR_PARAM_ANTENNA_PORTLIST:
-  case TMR_PARAM_ANTENNA_CONNECTEDPORTLIST:
-  case TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS:
-  case TMR_PARAM_RADIO_TEMPERATURE:
-  case TMR_PARAM_VERSION_HARDWARE:
-  case TMR_PARAM_VERSION_MODEL:
-  case TMR_PARAM_VERSION_SOFTWARE:
-#ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_ANTENNA_RETURNLOSS:
-  case TMR_PARAM_GEN2_PROTOCOLEXTENSION:
-#endif /* TMR_ENABLE_UHF */
-#ifdef TMR_ENABLE_HF_LF
-  case TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES:
-  case TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES:
-  case TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES:
-  case TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES:
-  case TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES:
-  case TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES:
-  case TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES:
-  case TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES:
-#endif /* TMR_ENABLE_HF_LF */
-    ret = TMR_ERROR_READONLY;
-    break;
-
+#endif /* ENABLE_TMR_PARAM_GPIO_INPUTLIST */
+#if ENABLE_TMR_PARAM_POWERMODE
   case TMR_PARAM_POWERMODE:
-    if (reader->connected)
     {
       ret = TMR_SR_cmdSetPowerMode(reader, *(TMR_SR_PowerMode *)value);
       if (TMR_SUCCESS == ret)
@@ -3822,80 +3430,101 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
         sr->powerMode = *(TMR_SR_PowerMode *)value;
       }
     }
-    else
-    {
-      sr->powerMode = *(TMR_SR_PowerMode *)value;
-    }
     break;
+#endif /* ENABLE_TMR_PARAM_POWERMODE */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_USERMODE
   case TMR_PARAM_USERMODE:
     ret = TMR_SR_cmdSetUserMode(reader, *(TMR_SR_UserMode *)value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_USERMODE */
+#if ENABLE_TMR_PARAM_GEN2_Q
   case TMR_PARAM_GEN2_Q:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_Q;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_Q */
+#if ENABLE_TMR_PARAM_GEN2_TAGENCODING
   case TMR_PARAM_GEN2_TAGENCODING:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TAGENCODING;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_TAGENCODING */
+#if ENABLE_TMR_PARAM_GEN2_SESSION
   case TMR_PARAM_GEN2_SESSION:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_SESSION;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_SESSION */
+#if ENABLE_TMR_PARAM_GEN2_TARGET
   case TMR_PARAM_GEN2_TARGET:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TARGET;
     break;
-
+#endif /*ENABLE_TMR_PARAM_GEN2_TARGET*/
+#if ENABLE_TMR_PARAM_GEN2_BLF
   case TMR_PARAM_GEN2_BLF:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_LINKFREQUENCY;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_BLF */
+#if ENABLE_TMR_PARAM_GEN2_TARI
   case TMR_PARAM_GEN2_TARI:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TARI;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_TARI */
+#if ENABLE_TMR_PARAM_GEN2_RFMODE
+  case TMR_PARAM_GEN2_RFMODE:
+    protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_RFMODE;
+    break;
+#endif /* ENABLE_TMR_PARAM_GEN2_RFMODE */
+#if ENABLE_TMR_PARAM_GEN2_WRITEMODE
   case TMR_PARAM_GEN2_WRITEMODE:
     sr->writeMode = *(TMR_GEN2_WriteMode *)value;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_WRITEMODE */
+#if ENABLE_TMR_PARAM_GEN2_BAP
   case TMR_PARAM_GEN2_BAP:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_BAP;
     break;
-
+#endif /*ENABLE_TMR_PARAM_GEN2_BAP*/
+#if ENABLE_TMR_PARAM_GEN2_T4
   case TMR_PARAM_GEN2_T4:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_T4;
     break;
-
+#endif /*ENABLE_TMR_PARAM_GEN2_T4*/
+#if ENABLE_TMR_PARAM_GEN2_INITIAL_Q
   case TMR_PARAM_GEN2_INITIAL_Q:
     protokey.u.gen2 = TMR_SR_GEN2_INITIAL_Q;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_INITIAL_Q */
+#if ENABLE_TMR_PARAM_GEN2_SEND_SELECT
   case TMR_PARAM_GEN2_SEND_SELECT:
     protokey.u.gen2 = TMR_SR_GEN2_SEND_SELECT;
     break;
+#endif /*ENABLE_TMR_PARAM_GEN2_SEND_SELECT*/
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_ISO180006B
+#if ENABLE_TMR_PARAM_ISO180006B_BLF
   case TMR_PARAM_ISO180006B_BLF:
     protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
     protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_LINKFREQUENCY;
     break;
+#endif /* ENABLE_TMR_PARAM_ISO180006B_BLF */
+#if ENABLE_TMR_PARAM_ISO180006B_MODULATION_DEPTH
   case TMR_PARAM_ISO180006B_MODULATION_DEPTH:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
       protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_MODULATION_DEPTH;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO180006B_MODULATION_DEPTH */
+#if ENABLE_TMR_PARAM_ISO180006B_DELIMITER
   case TMR_PARAM_ISO180006B_DELIMITER:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
       protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_DELIMITER;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_ISO180006B_DELIMITER*/
 #endif /* TMR_ENABLE_ISO180006B */
-
 #ifdef TMR_ENABLE_HF_LF
+#if ENABLE_TMR_PARAM_PROTOCOL_LIST
   case TMR_PARAM_PROTOCOL_LIST:
     {
       TMR_TagProtocolList *protocols;
@@ -3908,65 +3537,82 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       }
       break;
     }
+#endif /*ENABLE_TMR_PARAM_PROTOCOL_LIST*/
+#if ENABLE_TMR_PARAM_ISO14443A_TAGTYPE
   case TMR_PARAM_ISO14443A_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443A;
       protokey.u.iso14443a = TMR_SR_ISO14443A_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443A_TAGTYPE */
+#if ENABLE_TMR_PARAM_ISO14443B_TAGTYPE
   case TMR_PARAM_ISO14443B_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443B;
       protokey.u.iso14443b = TMR_SR_ISO14443B_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_ISO14443B_TAGTYPE*/
+#if ENABLE_TMR_PARAM_ISO15693_TAGTYPE
   case TMR_PARAM_ISO15693_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO15693;
       protokey.u.iso15693 = TMR_SR_ISO15693_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO15693_TAGTYPE */
+#if ENABLE_TMR_PARAM_LF125KHZ_TAGTYPE
   case TMR_PARAM_LF125KHZ_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_TAGTYPE */
+#if ENABLE_TMR_PARAM_LF134KHZ_TAGTYPE
   case TMR_PARAM_LF134KHZ_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF134KHZ;
       protokey.u.lf134khz = TMR_SR_LF134KHZ_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF134KHZ_TAGTYPE */
+#if ENABLE_TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT
   case TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_SECURE_RD_FORMAT;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT */
+#if ENABLE_TMR_PARAM_RADIO_KEEP_RF_ON
   case TMR_PARAM_RADIO_KEEP_RF_ON:
     {
       readerkey = TMR_SR_CONFIGURATION_KEEP_RF_ON;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_RADIO_KEEP_RF_ON */
 #endif /* TMR_ENABLE_HF_LF */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_GEN2_ACCESSPASSWORD
   case TMR_PARAM_GEN2_ACCESSPASSWORD:
     sr->gen2AccessPassword = *(TMR_GEN2_Password *)value;
     break;
+#endif /* ENABLE_TMR_PARAM_GEN2_ACCESSPASSWORD */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_LICENSE_KEY
   case TMR_PARAM_LICENSE_KEY:
     {
-	  uint32_t supportedProtocols;
       TMR_uint8List *license = (TMR_uint8List *)value;
 
-      ret = TMR_SR_cmdSetProtocolLicenseKey(reader, TMR_SR_SET_LICENSE_KEY, license->list, license->len, &supportedProtocols);
+      ret = TMR_SR_cmdSetProtocolLicenseKey(reader, TMR_SR_SET_LICENSE_KEY, license->list, license->len);
 	}
 	break;
-
+#endif /* ENABLE_TMR_PARAM_LICENSE_KEY */
+#if ENABLE_TMR_PARAM_MANAGE_LICENSE_KEY
   case TMR_PARAM_MANAGE_LICENSE_KEY:
     {
-      uint32_t supportedProtocols;
       TMR_LicenseOperation *licenseOperation;
       TMR_uint8List *license;
 
@@ -3979,98 +3625,49 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       licenseOperation = (TMR_LicenseOperation *)value ;
       license = licenseOperation->license;
 
-      ret = TMR_SR_cmdSetProtocolLicenseKey(reader, (TMR_SR_SetProtocolLicenseOption)licenseOperation->option, license->list, license->len, &supportedProtocols);
+      ret = TMR_SR_cmdSetProtocolLicenseKey(reader, (TMR_SR_SetProtocolLicenseOption)licenseOperation->option, license->list, license->len);
     }
     break;
-
+#endif /* ENABLE_TMR_PARAM_MANAGE_LICENSE_KEY */
+#if ENABLE_TMR_PARAM_USER_CONFIG
   case TMR_PARAM_USER_CONFIG:
     {
 	  TMR_SR_UserConfigOp *config = (TMR_SR_UserConfigOp *)value;
-
-	  switch(config->op)
-	  {
-        /* Save the configuration section to flash */
-        case TMR_USERCONFIG_SAVE:
-        /* Restore the saved configuration section from flash */
-        case TMR_USERCONFIG_RESTORE:
-        /*  Clear configuration section from flash, and restore default configuration section */
-        case TMR_USERCONFIG_CLEAR:
-        case TMR_USERCONFIG_VERIFY:
-        /* Save the read plan configuration section to flash */
-        case TMR_USERCONFIG_SAVE_WITH_READPLAN:     
-          ret = TMR_SR_cmdSetUserProfile(reader, (TMR_SR_UserConfigOperation)config->op, config->category, TMR_SR_CUSTOM_CONFIGURATION);
-          break;
-        default:
-          ret = TMR_ERROR_NOT_FOUND;
-      }
+   
+      ret = TMR_SR_cmdSetUserProfile(reader, (TMR_SR_UserConfigOperation)config->op, config->category, 
+                                       TMR_SR_CUSTOM_CONFIGURATION);
+      break;
 	}
-	break;
+#endif /*ENABLE_TMR_PARAM_USER_CONFIG*/
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_READER_STATISTICS
   case TMR_PARAM_READER_STATISTICS:
   /* Only RF On time statistic can be reset to 0 */
   ret = TMR_SR_cmdResetReaderStatistics(reader, TMR_SR_READER_STATS_ALL);
   break;
+#endif /* ENABLE_TMR_PARAM_READER_STATISTICS */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_READER_STATS
   case TMR_PARAM_READER_STATS:
   {
-    if ((NULL != reader->pSupportsResetStats) && (false == *(reader->pSupportsResetStats)))
-    {
-      /* Command not supported, pop up the error */
-      return TMR_ERROR_UNSUPPORTED;
-    }
-
     /* Only RF On time statistic can be reset to 0 */
-    ret = TMR_SR_cmdResetReaderStats(reader, reader->userStatsFlag);
+    ret = TMR_SR_cmdResetReaderStats(reader, TMR_READER_STATS_FLAG_ALL);
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_READER_STATS */
+#if ENABLE_TMR_PARAM_READER_STATS_ENABLE
   case TMR_PARAM_READER_STATS_ENABLE:
   {
-    TMR_Reader_StatsFlag flags;
-    flags = *(TMR_Reader_StatsFlag *)value;
-
-    if ((NULL != reader->pSupportsResetStats) && (false == *(reader->pSupportsResetStats)))
-    {
-      /* Command not supported, pop up the error */
-      return TMR_ERROR_UNSUPPORTED;
-    }
-
-    if (flags == TMR_READER_STATS_FLAG_ALL)
-    {
-      reader->statsFlag = reader->userStatsFlag;
-    }
-    else
-    {
-      if ((flags & reader->userStatsFlag) == flags)
-      {
-        /* Store the statitics flags requested by the user */
-        reader->statsFlag = flags;  
-      }
-      else
-      {
-        return TMR_ERROR_INVALID_READER_STATS;
-      }
-    }
+    reader->statsFlag = *(TMR_Reader_StatsFlag *)value;
     break;
   }
+#endif /* ENABLE_TMR_PARAM_READER_STATS_ENABLE */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_READER_WRITE_REPLY_TIMEOUT_EARLY_EXIT
   case TMR_PARAM_READER_WRITE_REPLY_TIMEOUT:
   case TMR_PARAM_READER_WRITE_EARLY_EXIT:
     {
       TMR_SR_Gen2ReaderWriteTimeOut timeout;
-
-      /* in case of timeout check for range */
-      switch (key)
-      {
-      case TMR_PARAM_READER_WRITE_REPLY_TIMEOUT:
-        {
-          if ( *(uint16_t *)value < 1000 || *(uint16_t *)value > 21000)
-            return TMR_ERROR_MSG_INVALID_PARAMETER_VALUE;
-          break;
-        }
-      default:
-        ;
-      }      
 
       /* Get the values before setting it */
       ret = TMR_SR_cmdGetReaderWriteTimeOut(reader, protokey.protocol, &timeout);
@@ -4100,65 +3697,45 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       ret = TMR_SR_cmdSetReaderWriteTimeOut (reader,protokey.protocol, &timeout);
       break;
     }
+#endif /*ENABLE_TMR_PARAM_READER_WRITE_REPLY_TIMEOUT*/
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_METADATAFLAG
   case TMR_PARAM_METADATAFLAG:
-	  {
-        TMR_TRD_MetadataFlag metadataFlag;
-        metadataFlag = *(TMR_TRD_MetadataFlag *)value;
-
-        if (metadataFlag & TMR_TRD_METADATA_FLAG_PROTOCOL)
-        {
-#ifdef TMR_ENABLE_HF_LF
-          if(TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0])
-          {
-            if (!(metadataFlag & TMR_TRD_METADATA_FLAG_TAGTYPE))
-			{
-              return TMR_ERROR_METADATA_TAGTYPEMISSING;
-			}
-          }
-#endif /* TMR_ENABLE_HF_LF */
-
-          if (metadataFlag != TMR_TRD_METADATA_FLAG_ALL)
-		  {
-            if ((metadataFlag & reader->allValidMetadataFlags) ==  metadataFlag)
-            {
-              reader->userMetadataFlag = metadataFlag;
-            }
-            else
-            {
-              ret = TMR_ERROR_METADATA_INVALID;
-            }
-          }
-          else
-          {
-            reader->userMetadataFlag = reader->allValidMetadataFlags;
-          }
-        }
-        else
-        {
-          ret = TMR_ERROR_METADATA_PROTOCOLMISSING;
-        }
-		break;
-	  }
+    {
+      reader->userMetadataFlag = *(TMR_TRD_MetadataFlag *)value;
+      break;
+    }
+#endif /* ENABLE_TMR_PARAM_METADATAFLAG */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_REGION_QUANTIZATION_STEP
   case TMR_PARAM_REGION_QUANTIZATION_STEP:
-    ret = TMR_SR_cmdSetQuantizationStep(reader, *(uint32_t *)value);  
+    ret = TMR_SR_cmdSetFrequencyHopTableOption(reader, *(uint32_t *)value,
+                                                 TMR_SR_OPCODE_FREQ_HOP_TABLE_OPTION_QUANTIZATION_STEP);
     break;
+#endif /*ENABLE_TMR_PARAM_REGION_QUANTIZATION_STEP*/
+#if ENABLE_TMR_PARAM_REGION_MINIMUM_FREQUENCY
   case TMR_PARAM_REGION_MINIMUM_FREQUENCY:
-    ret = TMR_SR_cmdSetMinimumFrequency(reader, *(uint32_t *)value);  
+    ret = TMR_SR_cmdSetFrequencyHopTableOption(reader, *(uint32_t *)value, 
+                                                 TMR_SR_OPCODE_FREQ_HOP_TABLE_OPTION_MINIMUM_FREQUENCY);  
     break;
+#endif /* ENABLE_TMR_PARAM_REGION_MINIMUM_FREQUENCY */
 #endif /* TMR_ENABLE_UHF */
 #if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
+#if ENABLE_TMR_PARAM_REGULATORY_MODE
   case TMR_PARAM_REGULATORY_MODE:
     {
       reader->regulatoryParams.RegMode = *(TMR_SR_RegulatoryMode *)value;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_REGULATORY_MODE*/
+#if ENABLE_TMR_PARAM_REGULATORY_MODULATION
   case TMR_PARAM_REGULATORY_MODULATION:
     {
       reader->regulatoryParams.RegModulation = *(TMR_SR_RegulatoryModulation *)value;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_REGULATORY_MODULATION*/
+#if ENABLE_TMR_PARAM_REGULATORY_ONTIME
   case TMR_PARAM_REGULATORY_ONTIME:
     {
       if(((*(uint32_t *)value) < TMR_MIN_VALUE) || ((*(uint32_t *)value) > TMR_MAX_VALUE))
@@ -4168,6 +3745,8 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       reader->regulatoryParams.regOnTime = *(uint32_t *)value;
       break;
     }
+#endif /*ENABLE_TMR_PARAM_REGULATORY_ONTIME*/
+#if ENABLE_TMR_PARAM_REGULATORY_OFFTIME
   case TMR_PARAM_REGULATORY_OFFTIME:
     {
       if(((*(uint32_t *)value) < TMR_MIN_VALUE) || ((*(uint32_t *)value) > TMR_MAX_VALUE))
@@ -4177,22 +3756,23 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       reader->regulatoryParams.regOffTime = *(uint32_t *)value;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_OFFTIME */
+#if ENABLE_TMR_PARAM_REGULATORY_ENABLE
   case TMR_PARAM_REGULATORY_ENABLE:
     {
       ret = TMR_SR_cmdSetRegulatoryTest(reader, *(uint8_t *)value);
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_ENABLE */
 #endif /* TMR_ENABLE_HF_LF || BARE_METAL */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_PER_ANTENNA_TIME
   case TMR_PARAM_PER_ANTENNA_TIME:
   {
     ret = TMR_SR_cmdSetPerAntennaTime(reader, (TMR_PortValueList *)value);
-    if(ret == TMR_SUCCESS)
-    {
-      reader->isPerAntTimeSet = true;
-    }
     break;
   }
+#endif /*ENABLE_TMR_PARAM_PER_ANTENNA_TIME*/
 #endif /* TMR_ENABLE_UHF */
   default:
     ret = TMR_ERROR_NOT_FOUND;
@@ -4202,10 +3782,8 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
   {
 #ifdef TMR_ENABLE_UHF
   case TMR_PARAM_ANTENNA_CHECKPORT:
-  case TMR_PARAM_RADIO_ENABLEPOWERSAVE:
   case TMR_PARAM_RADIO_ENABLESJC:
   case TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI:
-  case TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYDATA:
 #else
@@ -4217,24 +3795,7 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
    }
 
 #ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_EXTENDEDEPC:
-    {
-      if (isM6eFamily(&reader->u.serialReader))
-      {
-        ret = TMR_ERROR_UNSUPPORTED;
-      }
-      else
-      {
-        ret = TMR_SR_cmdSetReaderConfiguration(reader, readerkey, value);
-        if(TMR_SUCCESS == ret)
-        {
-          /* cache the extended epc setting */
-          reader->u.serialReader.extendedEPC = *(bool *)value;
-        }
-      }
-    }
-    break;
-
+#if ENABLE_TMR_PARAM_GEN2_BAP
   case TMR_PARAM_GEN2_BAP:
     {
       TMR_GEN2_Bap *bap;
@@ -4301,6 +3862,7 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
       }
       // No break -- fall through to regular Gen2 param handler
     }
+#endif /* ENABLE_TMR_PARAM_GEN2_BAP */
 
   case TMR_PARAM_GEN2_Q:
   case TMR_PARAM_GEN2_TAGENCODING:
@@ -4308,6 +3870,7 @@ TMR_SR_paramSet(struct TMR_Reader *reader, TMR_Param key, const void *value)
   case TMR_PARAM_GEN2_TARGET:
   case TMR_PARAM_GEN2_BLF:
   case TMR_PARAM_GEN2_TARI:
+  case TMR_PARAM_GEN2_RFMODE:
   case TMR_PARAM_GEN2_T4:
   case TMR_PARAM_GEN2_INITIAL_Q:
   case TMR_PARAM_GEN2_SEND_SELECT:
@@ -4340,14 +3903,13 @@ static TMR_Status
 TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
 {
   TMR_Status ret;
-  TMR_SR_Configuration readerkey;
+  TMR_SR_Configuration readerkey = 0;
   TMR_SR_ProtocolConfiguration protokey;
   TMR_SR_SerialReader *sr;
 
   ret = TMR_SUCCESS;
   sr = &reader->u.serialReader;
 #ifdef TMR_ENABLE_UHF
-  readerkey = TMR_SR_CONFIGURATION_TRANSMIT_POWER_SAVE;
   protokey.protocol = TMR_TAG_PROTOCOL_GEN2;
 #endif /* TMR_ENABLE_UHF */
   if (BITGET(sr->paramConfirmed, key) && 0 == BITGET(sr->paramPresent, key))
@@ -4357,56 +3919,42 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
 
   switch (key)
   {
+#if ENABLE_TMR_PARAM_BAUDRATE
   case TMR_PARAM_BAUDRATE:
     *(uint32_t *)value = sr->baudRate;
     break;
-
+#endif /* ENABLE_TMR_PARAM_BAUDRATE */
+#if ENABLE_TMR_PARAM_PROBEBAUDRATES
   case TMR_PARAM_PROBEBAUDRATES:
     {
-      TMR_uint32List *uint32List;
+      TMR_uint32List *uint32List = value;
+      uint32List->len = 0;
       uint8_t i;
 
-      uint32List = value;
-
-      if (sr->probeBaudRates.len > uint32List->max)
+      for(i = 0; ((i < sr->probeBaudRates.len) && (i < uint32List->max)); i++)
       {
-        sr->probeBaudRates.len = uint32List->max;
-      }
-
-      if (sr->probeBaudRates.len)
-      {
-        for(i = 0; i < sr->probeBaudRates.len; i++)
-        {
-          uint32List->list[i] = sr->probeBaudRates.list[i];
-        }
-        uint32List->len = sr->probeBaudRates.len;
-      }
-      else
-      {
-        //list is empty
+        uint32List->list[i] = sr->probeBaudRates.list[i];
+        uint32List->len++;
       }
       break;
     }
-
+#endif /* ENABLE_TMR_PARAM_PROBEBAUDRATES */
+#if ENABLE_TMR_PARAM_URI
   case TMR_PARAM_URI:
-    if (NULL != value)
-    {
-      TMR_stringCopy((TMR_String *)value, reader->uri, (int)strlen(reader->uri));
-    }
-    else
-    {
-      ret = TMR_ERROR_ILLEGAL_VALUE;
-    }
+    TMR_stringCopy((TMR_String *)value, reader->uri, (int)strlen(reader->uri));
     break;
-
+#endif /*ENABLE_TMR_PARAM_URI*/
+#if ENABLE_TMR_PARAM_COMMANDTIMEOUT
   case TMR_PARAM_COMMANDTIMEOUT:
     *(uint32_t *)value = sr->commandTimeout;
     break;
-
+#endif  /* ENABLE_TMR_PARAM_COMMANDTIMEOUT */
+#if ENABLE_TMR_PARAM_TRANSPORTTIMEOUT
   case TMR_PARAM_TRANSPORTTIMEOUT:
     *(uint32_t *)value = sr->transportTimeout;
     break;
-
+#endif /*ENABLE_TMR_PARAM_TRANSPORTTIMEOUT*/
+#if ENABLE_TMR_PARAM_REGION_ID
   case TMR_PARAM_REGION_ID:
     {
       if ((TMR_REGION_NONE == sr->regionId) && (reader->connected))
@@ -4416,26 +3964,29 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       *(TMR_Region *)value = sr->regionId;
     }
 	break;
+#endif /*ENABLE_TMR_PARAM_REGION_ID*/
 #ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_RADIO_ENABLEPOWERSAVE:
-	readerkey = TMR_SR_CONFIGURATION_TRANSMIT_POWER_SAVE;
-	break;
-
+#if ENABLE_TMR_PARAM_RADIO_ENABLESJC
   case TMR_PARAM_RADIO_ENABLESJC:
     readerkey = TMR_SR_CONFIGURATION_SELF_JAMMER_CANCELLATION;
 	break;
-
+#endif /*ENABLE_TMR_PARAM_RADIO_ENABLESJC*/
+#if ENABLE_TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT
   case TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT:
-  if (isM6eFamily(sr))
-  {
-    *(int32_t *)value = sr->readFilterTimeout;
-  }
-  else
-  {
-    ret = TMR_ERROR_NOT_FOUND;
-  }
-  break;
+    {
+      int32_t timeout = 0;
+
+      /* Get reader's read filter entry timeout */
+      ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_READ_FILTER_TIMEOUT, &timeout);
+      if (TMR_SUCCESS == ret)
+      {
+        *(int32_t *)value = (0 == timeout) ? TMR_DEFAULT_READ_FILTER_TIMEOUT : timeout;
+      }
+    }
+    break;
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_READFILTERTIMEOUT */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_TAGREADDATA_ENABLEREADFILTER
   case TMR_PARAM_TAGREADDATA_ENABLEREADFILTER:
     {
 #ifdef TMR_ENABLE_HF_LF
@@ -4444,95 +3995,106 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       *(bool *)value = sr->enableReadFiltering;
     }
     break;
-#ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_EXTENDEDEPC:
-    readerkey = TMR_SR_CONFIGURATION_EXTENDED_EPC;
-    break;
-#endif /* TMR_ENABLE_UHF */
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_ENABLEREADFILTER */
+#if ENABLE_TMR_PARAM_RADIO_POWERMAX_POWERMIN
   case TMR_PARAM_RADIO_POWERMAX:
-  {
-    TMR_SR_PowerWithLimits power;
-
-    ret = TMR_SR_cmdGetReadTxPowerWithLimits(reader, &power);
-    if (TMR_SUCCESS != ret)
-    {
-      break;
-    }
-    *(int16_t *)value = power.maxPower;
-    break;
-  }
-
   case TMR_PARAM_RADIO_POWERMIN:
   {
     TMR_SR_PowerWithLimits power;
 
     ret = TMR_SR_cmdGetReadTxPowerWithLimits(reader, &power);
     if (TMR_SUCCESS != ret)
+    {
       break;
-    *(int16_t *)value = power.minPower;
+    }
+
+    switch(key)
+    {
+      case TMR_PARAM_RADIO_POWERMAX:
+      {
+        *(int16_t *)value = power.maxPower;
+        break;
+      }
+      case TMR_PARAM_RADIO_POWERMIN:
+      {
+        *(int16_t *)value = power.minPower;
+        break;
+      }
+      default:
+        ret = TMR_ERROR_NOT_FOUND;
+    }
+
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_RADIO_POWERMAX */
+#if ENABLE_TMR_PARAM_RADIO_READPOWER
   case TMR_PARAM_RADIO_READPOWER:
     ret = TMR_SR_cmdGetReadTxPower(reader, (int32_t *)value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_RADIO_READPOWER */
+#if ENABLE_TMR_PARAM_RADIO_WRITEPOWER
   case TMR_PARAM_RADIO_WRITEPOWER:
     ret = TMR_SR_cmdGetWriteTxPower(reader, (int32_t *)value);
     break;
+#endif /* ENABLE_TMR_PARAM_RADIO_WRITEPOWER */
 #ifdef TMR_ENABLE_UHF
-
+#if ENABLE_TMR_PARAM_ANTENNA_CHECKPORT
   case TMR_PARAM_ANTENNA_CHECKPORT:
     readerkey = TMR_SR_CONFIGURATION_SAFETY_ANTENNA_CHECK;
     break;
-
+#endif /* ENABLE_TMR_PARAM_ANTENNA_CHECKPORT */
+#if ENABLE_TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI
   case TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI:
     readerkey = TMR_SR_CONFIGURATION_RECORD_HIGHEST_RSSI;
     break;
-
-  case TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM:
-    readerkey = TMR_SR_CONFIGURATION_RSSI_IN_DBM;
-    break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI */
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA
   case TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA:
     readerkey = TMR_SR_CONFIGURATION_UNIQUE_BY_ANTENNA;
     break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA */
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYDATA
   case TMR_PARAM_TAGREADDATA_UNIQUEBYDATA:
     readerkey = TMR_SR_CONFIGURATION_UNIQUE_BY_DATA;
     break;
-
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYDATA */
+#if ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL
   case TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL:
-    if (isM6eFamily(sr))
-    {
-      ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_UNIQUE_BY_PROTOCOL, value);
-    }
-    else
-    {
-      ret = TMR_ERROR_NOT_FOUND;
-    }
+    ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_UNIQUE_BY_PROTOCOL, value);
     break;
+#endif /* ENABLE_TMR_PARAM_TAGREADDATA_UNIQUEBYPROTOCOL */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_PRODUCT_GROUP_ID
   case TMR_PARAM_PRODUCT_GROUP_ID:
     readerkey = TMR_SR_CONFIGURATION_PRODUCT_GROUP_ID;
     break;
-
+#endif /* ENABLE_TMR_PARAM_PRODUCT_GROUP_ID */
+#if ENABLE_TMR_PARAM_PRODUCT_ID
   case TMR_PARAM_PRODUCT_ID:
     readerkey = TMR_SR_CONFIGURATION_PRODUCT_ID;
     break;
+#endif /* ENABLE_TMR_PARAM_PRODUCT_ID */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT
   case TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT:
     *(bool *)value = (reader->streamStats & TMR_SR_STATUS_ANTENNA) ? true : false;
     break;
+#endif /* ENABLE_TMR_PARAM_STATUS_ENABLE_ANTENNAREPORT */
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT
   case TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT:
     *(bool *)value = (reader->streamStats & TMR_SR_STATUS_FREQUENCY) ? true : false;
     break;
+#endif /* ENABLE_TMR_PARAM_STATUS_ENABLE_FREQUENCYREPORT */
+#if ENABLE_TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT
   case TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT:
     *(bool *)value = (reader->streamStats & TMR_SR_STATUS_TEMPERATURE) ? true : false;
     break;
-
+#endif /* ENABLE_TMR_PARAM_STATUS_ENABLE_TEMPERATUREREPORT */
+#endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_ANTENNA_PORTSWITCHGPOS
   case TMR_PARAM_ANTENNA_PORTSWITCHGPOS:
   {
+    uint8_t i = 0;
     TMR_uint8List *u8list;
     u8list = value;
 
@@ -4547,25 +4109,18 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     {
       LISTAPPEND(u8list, 0);
     }
-    if ((reader->portmask >> 0) & 1)
+
+    for(i = 0; i < 4; i++)
     {
-      LISTAPPEND(u8list, 1);
-    }
-    if ((reader->portmask >> 1) & 1)
-    {
-      LISTAPPEND(u8list, 2);
-    }
-    if ((reader->portmask >> 2) & 1)
-    {
-      LISTAPPEND(u8list, 3);
-    }
-    if ((reader->portmask >> 3) & 1)
-    {
-      LISTAPPEND(u8list, 4);
+      if ((reader->portmask >> i) & 1)
+      {
+        LISTAPPEND(u8list, i + 1);
+      }
     }
     break;
   }
-#endif /* TMR_ENABLE_UHF */
+#endif /* ENABLE_TMR_PARAM_ANTENNA_PORTSWITCHGPOS */
+#if ENABLE_TMR_PARAM_TRIGGER_READ_GPI
   case TMR_PARAM_TRIGGER_READ_GPI:
     {
       uint8_t portmask, i;
@@ -4590,24 +4145,30 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       }
       break;
     }
+#endif /* ENABLE_TMR_PARAM_TRIGGER_READ_GPI */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_ANTENNA_SETTLINGTIMELIST
   case TMR_PARAM_ANTENNA_SETTLINGTIMELIST:
     ret = getPortValues(reader, value, 2);
     break;
-
+#endif /* ENABLE_TMR_PARAM_ANTENNA_SETTLINGTIMELIST */
+#if ENABLE_TMR_PARAM_RADIO_PORTREADPOWERLIST
   case TMR_PARAM_RADIO_PORTREADPOWERLIST:
     ret = getPortValues(reader, value, 0);
     break;
-
+#endif /* ENABLE_TMR_PARAM_RADIO_PORTREADPOWERLIST */
+#if ENABLE_TMR_PARAM_RADIO_PORTWRITEPOWERLIST
   case TMR_PARAM_RADIO_PORTWRITEPOWERLIST:
     ret = getPortValues(reader, value, 1);
     break;
-  
+#endif /* ENABLE_TMR_PARAM_RADIO_PORTWRITEPOWERLIST */
+#if ENABLE_TMR_PARAM_ANTENNA_RETURNLOSS
   case TMR_PARAM_ANTENNA_RETURNLOSS:
     ret = TMR_SR_cmdGetAntennaReturnLoss(reader, value);
     break;
+#endif /* ENABLE_TMR_PARAM_ANTENNA_RETURNLOSS */
 #endif /* TMR_ENABLE_UHF */
-
+#if ENABLE_TMR_PARAM_GPIO_INPUTLIST_OUTPUTLIST
   case TMR_PARAM_GPIO_INPUTLIST:
   case TMR_PARAM_GPIO_OUTPUTLIST:
   {
@@ -4615,9 +4176,6 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     u8list = value;
     u8list->len = 0;
 
-#ifdef TMR_ENABLE_UHF
-    if (isM6eFamily(sr) || (TMR_SR_MODEL_M3E == sr->versionInfo.hardware[0]))
-#endif /* TMR_ENABLE_UHF */
     {
       int pin, wantout;
       bool out;
@@ -4658,22 +4216,25 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
         }
       }
     }
-#ifdef TMR_ENABLE_UHF
-    else
-    {
-      LISTAPPEND(u8list, 1);
-      LISTAPPEND(u8list, 2);
-    }
-#endif /* TMR_ENABLE_UHF */
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_GPIO_INPUTLIST */
+#if ENABLE_TMR_PARAM_ANTENNA_PORTLIST
   case TMR_PARAM_ANTENNA_PORTLIST:
   {
     uint8_t i;
-    TMR_uint8List *u8list;
+    TMR_uint8List *u8list = value;
 
-    u8list = value;
+    if(NULL == reader->u.serialReader.txRxMap)
+    {
+      TMR_Status ret;
+
+      ret = initTxRxMapFromPorts(reader);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+    }
 
     u8list->len = 0;
     for (i = 0; i < reader->u.serialReader.txRxMap->len; i++)
@@ -4682,19 +4243,14 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     }
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_ANTENNA_PORTLIST */
+#if ENABLE_TMR_PARAM_ANTENNA_CONNECTEDPORTLIST
   case TMR_PARAM_ANTENNA_CONNECTEDPORTLIST:
   {
     // Store detected ports in array for quick lookup
-    bool detected[TMR_SR_MAX_ANTENNA_PORTS+1];
+    bool detected[TMR_SR_MAX_ANTENNA_PORTS + 1] = {0};
     uint8_t i;
-    TMR_uint8List *u8list;
-
-    for (i=0; i<TMR_SR_MAX_ANTENNA_PORTS; i++)
-    {
-      detected[i] = false;
-    }
-    u8list = value;
+    TMR_uint8List *u8list = value;
 
     {
       TMR_SR_PortDetect ports[TMR_SR_MAX_ANTENNA_PORTS];
@@ -4710,8 +4266,13 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       {
         detected[ports[i].port] = ports[i].detected;
       }
+
+      if(NULL == reader->u.serialReader.txRxMap)
+      {
+        updateTxRxMapData(reader, ports, numPorts);
+      }
     }
-    
+
     u8list->len = 0;
     for (i=0; i<reader->u.serialReader.txRxMap->len; i++)
     {
@@ -4726,11 +4287,21 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     }
     break;
   }
-#ifdef TMR_ENABLE_UHF
+#endif /* ENABLE_TMR_PARAM_ANTENNA_CONNECTEDPORTLIST */
+#if ENABLE_TMR_PARAM_ANTENNA_TXRXMAP
   case TMR_PARAM_ANTENNA_TXRXMAP:
   {
     TMR_AntennaMapList *map, *mymap;
     uint16_t i;
+
+    if(NULL == sr->txRxMap)
+    {
+      ret = initTxRxMapFromPorts(reader);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+    }
 
     map = value;
     mymap = sr->txRxMap;
@@ -4740,7 +4311,9 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     map->len = mymap->len;
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_ANTENNA_TXRXMAP */
+#ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_REGION_HOPTABLE
   case TMR_PARAM_REGION_HOPTABLE:
   {
     TMR_uint32List *u32List;
@@ -4757,23 +4330,28 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     u32List->len = count;
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_REGION_HOPTABLE */
+#if ENABLE_TMR_PARAM_REGION_HOPTIME
   case TMR_PARAM_REGION_HOPTIME:
     ret = TMR_SR_cmdGetFrequencyHopTime(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_REGION_HOPTIME */
+#if ENABLE_TMR_PARAM_REGION_DWELL_TIME
   case  TMR_PARAM_REGION_DWELL_TIME:
     ret = TMR_SR_cmdGetRegionConfiguration(reader, TMR_SR_REGION_CONFIGURATION_DWELLTIME, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_REGION_DWELL_TIME */
+#if ENABLE_TMR_PARAM_REGION_DWELL_TIME_ENABLE
   case  TMR_PARAM_REGION_DWELL_TIME_ENABLE:
     ret = TMR_SR_cmdGetRegionConfiguration(reader, TMR_SR_REGION_CONFIGURATION_DWELLTIME_ENABLED, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_REGION_DWELL_TIME_ENABLE */
+#if ENABLE_TMR_PARAM_REGION_LBT_THRESHOLD
   case  TMR_PARAM_REGION_LBT_THRESHOLD:
     ret = TMR_SR_cmdGetRegionConfiguration(reader, TMR_SR_REGION_CONFIGURATION_LBTTHRESHOLD, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_REGION_LBT_THRESHOLD */
+#if ENABLE_TMR_PARAM_REGION_LBT_ENABLE
   case TMR_PARAM_REGION_LBT_ENABLE:
     ret = TMR_SR_cmdGetRegionConfiguration(reader,
                                            TMR_SR_REGION_CONFIGURATION_LBT_ENABLED, value);
@@ -4783,18 +4361,26 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       ret = TMR_SUCCESS;
     }
     break;
+#endif /* ENABLE_TMR_PARAM_REGION_LBT_ENABLE */
 #endif /* TMR_ENABLE_UHF */
-
+#if ENABLE_TMR_PARAM_TAGOP_ANTENNA
   case TMR_PARAM_TAGOP_ANTENNA:
     *(uint8_t *)value = reader->tagOpParams.antenna;
     break;
-
+#endif /* ENABLE_TMR_PARAM_TAGOP_ANTENNA */
+#if ENABLE_TMR_PARAM_TAGOP_PROTOCOL
   case TMR_PARAM_TAGOP_PROTOCOL:
-    *(TMR_TagProtocol *)value = reader->tagOpParams.protocol;
-    break;
-
+    {
+      ret = TMR_SR_cmdGetCurrentProtocol(reader, &reader->tagOpParams.protocol);
+      if (TMR_SUCCESS == ret)
+      {
+        *(TMR_TagProtocol *)value = reader->tagOpParams.protocol;
+      }
+      break;
+    }
+#endif /* ENABLE_TMR_PARAM_TAGOP_PROTOCOL*/
+#if ENABLE_TMR_PARAM_POWERMODE
   case TMR_PARAM_POWERMODE:
-    if (reader->connected)
     {
       TMR_SR_PowerMode pm;
       ret = TMR_SR_cmdGetPowerMode(reader, &pm);
@@ -4805,198 +4391,264 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     }
     *(TMR_SR_PowerMode*)value = sr->powerMode;
     break;
+#endif /* ENABLE_TMR_PARAM_POWERMODE */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_USERMODE
   case TMR_PARAM_USERMODE:
     ret = TMR_SR_cmdGetUserMode(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_USERMODE*/
+#if ENABLE_TMR_PARAM_GEN2_Q
   case TMR_PARAM_GEN2_Q:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_Q;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_Q */
+#if ENABLE_TMR_PARAM_GEN2_TAGENCODING
   case TMR_PARAM_GEN2_TAGENCODING:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TAGENCODING;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_TAGENCODING */
+#if ENABLE_TMR_PARAM_GEN2_SESSION
   case TMR_PARAM_GEN2_SESSION:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_SESSION;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_SESSION */
+#if ENABLE_TMR_PARAM_GEN2_TARGET
   case TMR_PARAM_GEN2_TARGET:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TARGET;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_TARGET */
+#if ENABLE_TMR_PARAM_GEN2_BLF
   case TMR_PARAM_GEN2_BLF:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_LINKFREQUENCY;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_BLF */
+#if ENABLE_TMR_PARAM_GEN2_TARI
   case TMR_PARAM_GEN2_TARI:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_TARI;
     break;
-    
+#endif /* ENABLE_TMR_PARAM_GEN2_TARI */
+#if ENABLE_TMR_PARAM_GEN2_RFMODE
+  case TMR_PARAM_GEN2_RFMODE:
+    protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_RFMODE;
+    break;
+#endif /* ENABLE_TMR_PARAM_GEN2_RFMODE */
+#if ENABLE_TMR_PARAM_GEN2_BAP
   case TMR_PARAM_GEN2_BAP:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_BAP;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_BAP */
+#if ENABLE_TMR_PARAM_GEN2_WRITEMODE
   case TMR_PARAM_GEN2_WRITEMODE:
     *(TMR_GEN2_WriteMode *)value = sr->writeMode;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_WRITEMODE */
+#if ENABLE_TMR_PARAM_GEN2_PROTOCOLEXTENSION
   case TMR_PARAM_GEN2_PROTOCOLEXTENSION:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_PROTCOLEXTENSION;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_PROTOCOLEXTENSION */
+#if ENABLE_TMR_PARAM_GEN2_T4
   case TMR_PARAM_GEN2_T4:
     protokey.u.gen2 = TMR_SR_GEN2_CONFIGURATION_T4;
     break;
- 
+#endif /* ENABLE_TMR_PARAM_GEN2_T4 */ 
+#if ENABLE_TMR_PARAM_GEN2_INITIAL_Q
   case TMR_PARAM_GEN2_INITIAL_Q:
     protokey.u.gen2 = TMR_SR_GEN2_INITIAL_Q;
     break;
-
+#endif /* ENABLE_TMR_PARAM_GEN2_INITIAL_Q */
+#if ENABLE_TMR_PARAM_GEN2_SEND_SELECT
   case TMR_PARAM_GEN2_SEND_SELECT:
     protokey.u.gen2 = TMR_SR_GEN2_SEND_SELECT;
     break;
+#endif /* ENABLE_TMR_PARAM_GEN2_SEND_SELECT */
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_ISO180006B
+#if ENABLE_TMR_PARAM_ISO180006B_BLF
   case TMR_PARAM_ISO180006B_BLF:
     protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
     protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_LINKFREQUENCY;
     break;
+#endif /* ENABLE_TMR_PARAM_ISO180006B_BLF */
+#if ENABLE_TMR_PARAM_ISO180006B_MODULATION_DEPTH
   case TMR_PARAM_ISO180006B_MODULATION_DEPTH:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
       protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_MODULATION_DEPTH;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO180006B_MODULATION_DEPTH */
+#if ENABLE_TMR_PARAM_ISO180006B_DELIMITER
   case TMR_PARAM_ISO180006B_DELIMITER:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO180006B;
       protokey.u.iso180006b = TMR_SR_ISO180006B_CONFIGURATION_DELIMITER;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO180006B_DELIMITER */
 #endif /* TMR_ENABLE_ISO180006B */
 #ifdef TMR_ENABLE_HF_LF
+#if ENABLE_TMR_PARAM_PROTOCOL_LIST
   case TMR_PARAM_PROTOCOL_LIST:
     {
       ret = TMR_SR_cmdGetProtocolList(reader, value);
       break;
     }
+#endif /* ENABLE_TMR_PARAM_PROTOCOL_LIST */
+#if ENABLE_TMR_PARAM_ISO14443A_TAGTYPE
   case TMR_PARAM_ISO14443A_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443A;
       protokey.u.iso14443a = TMR_SR_ISO14443A_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443A_TAGTYPE */
+#if ENABLE_TMR_PARAM_ISO14443B_TAGTYPE
   case TMR_PARAM_ISO14443B_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443B;
       protokey.u.iso14443b = TMR_SR_ISO14443B_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443B_TAGTYPE */
+#if ENABLE_TMR_PARAM_ISO15693_TAGTYPE
   case TMR_PARAM_ISO15693_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO15693;
       protokey.u.iso15693 = TMR_SR_ISO15693_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO15693_TAGTYPE */
+#if ENABLE_TMR_PARAM_LF125KHZ_TAGTYPE
   case TMR_PARAM_LF125KHZ_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_TAGTYPE */
+#if ENABLE_TMR_PARAM_LF134KHZ_TAGTYPE
   case TMR_PARAM_LF134KHZ_TAGTYPE:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF134KHZ;
       protokey.u.lf134khz = TMR_SR_LF134KHZ_CONFIGURATION_TAGTYPE;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF134KHZ_TAGTYPE */
+#if ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES
   case TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443A;
       protokey.u.iso14443a = TMR_SR_ISO14443A_CONFIGURATION_SUPPORTED_TAGTYPES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAGTYPES */
+#if ENABLE_TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES
   case TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443B;
       protokey.u.iso14443b = TMR_SR_ISO14443B_CONFIGURATION_SUPPORTED_TAGTYPES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443B_SUPPORTED_TAGTYPES */
+#if ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES
   case TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO15693;
       protokey.u.iso15693 = TMR_SR_ISO15693_CONFIGURATION_SUPPORTED_TAGTYPES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAGTYPES */
+#if ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES
   case TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_SUPPORTED_TAGTYPES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAGTYPES */
+#if ENABLE_TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES
   case TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF134KHZ;
       protokey.u.lf134khz = TMR_SR_LF134KHZ_CONFIGURATION_SUPPORTED_TAGTYPES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF134KHZ_SUPPORTED_TAGTYPES */
+#if ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES
   case TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO14443A;
       protokey.u.iso14443a = TMR_SR_ISO14443A_CONFIGURATION_SUPPORTED_FEATURES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO14443A_SUPPORTED_TAG_FEATURES */
+#if ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES
   case TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_ISO15693;
       protokey.u.iso15693 = TMR_SR_ISO15693_CONFIGURATION_SUPPORTED_FEATURES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_ISO15693_SUPPORTED_TAG_FEATURES */
+#if ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES
   case TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_SUPPORTED_FEATURES;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_SUPPORTED_TAG_FEATURES */
+#if ENABLE_TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT
   case TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT:
     {
       protokey.protocol = TMR_TAG_PROTOCOL_LF125KHZ;
       protokey.u.lf125khz = TMR_SR_LF125KHZ_CONFIGURATION_SECURE_RD_FORMAT;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_LF125KHZ_SECURE_RD_FORMAT */
+#if ENABLE_TMR_PARAM_RADIO_KEEP_RF_ON
   case TMR_PARAM_RADIO_KEEP_RF_ON:
     {
       readerkey = TMR_SR_CONFIGURATION_KEEP_RF_ON;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_RADIO_KEEP_RF_ON */
 #endif /* TMR_ENABLE_HF_LF */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_GEN2_ACCESSPASSWORD
   case TMR_PARAM_GEN2_ACCESSPASSWORD:
     *(TMR_GEN2_Password *)value = sr->gen2AccessPassword;
     break;
+#endif /* ENABLE_TMR_PARAM_GEN2_ACCESSPASSWORD */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_REGION_SUPPORTEDREGIONS
   case TMR_PARAM_REGION_SUPPORTEDREGIONS:
     ret = TMR_SR_cmdGetAvailableRegions(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_REGION_SUPPORTEDREGIONS */
+#if ENABLE_TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS
   case TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS:
     ret = TMR_SR_cmdGetAvailableProtocols(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_VERSION_SUPPORTEDPROTOCOLS */
+#if ENABLE_TMR_PARAM_RADIO_TEMPERATURE
   case TMR_PARAM_RADIO_TEMPERATURE:
     ret = TMR_SR_cmdGetTemperature(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_RADIO_TEMPERATURE */
+#if ENABLE_TMR_PARAM_VERSION_HARDWARE
   case TMR_PARAM_VERSION_HARDWARE:
     ret = getHardwareInfo(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_VERSION_HARDWARE */
+#if ENABLE_TMR_PARAM_VERSION_SERIAL
   case TMR_PARAM_VERSION_SERIAL:
     ret = getSerialNumber(reader, value);
     break;
-
+#endif /* ENABLE_TMR_PARAM_VERSION_SERIAL */
+#if ENABLE_TMR_PARAM_VERSION_MODEL
   case TMR_PARAM_VERSION_MODEL:
   {
     const char *model = NULL;
@@ -5004,39 +4656,6 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     switch (sr->versionInfo.hardware[0])
     {
 #ifdef TMR_ENABLE_UHF
-    case TMR_SR_MODEL_M5E:
-      model = "M5e";
-      break;
-    case TMR_SR_MODEL_M5E_COMPACT:
-      model = "M5e Compact";
-      break;
-    case TMR_SR_MODEL_M5E_I:
-      {
-        /**
-         * I - International . It has following Variants.
-         **/
-        switch (sr->versionInfo.hardware[3])
-        {
-
-          case TMR_SR_MODEL_M5E_I_REV_NA:
-            model = "M5e NA";
-            break;
-          case TMR_SR_MODEL_M5E_I_REV_JP:
-            model = "M5E JP";
-            break;
-          case TMR_SR_MODEL_M5E_I_REV_PRC:
-            model = "M5e PRC";
-            break;
-          case TMR_SR_MODEL_M5E_I_REV_EU:
-          default:
-            model = "M5e EU";// If there is no model recognized, it should fallback to base model.
-            break;
-        }
-        break;
-      }
-    case TMR_SR_MODEL_M4E:
-      model = "M4e";
-      break;
     case TMR_SR_MODEL_M6E:
       model = "M6e";
       break;
@@ -5082,6 +4701,35 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     case TMR_SR_MODEL_M6E_NANO:
       model = "M6e Nano";
       break;
+    case TMR_SR_MODEL_M7E:
+    {
+      // versionInfo.hardware[2] represents HW SKU -- hence used this for distinguishing models
+      // versionInfo.hardware[3] is HW version, which remains to be 0x01(since only 1 revision for now)
+      // -- cannot be used for differentiating models
+      // for all M7e variants
+      switch (sr->versionInfo.hardware[2])
+      {
+        case TMR_SR_MODEL_M7E_PICO:
+          model = "M7e Pico";
+          break;
+        case TMR_SR_MODEL_M7E_DEKA:
+          model = "M7e Deka";
+          break;
+        case TMR_SR_MODEL_M7E_HECTO:
+          model = "M7e Hecto";
+          break;
+        case TMR_SR_MODEL_M7E_MEGA:
+          model = "M7e Mega";
+          break;
+        case TMR_SR_MODEL_M7E_TERA:
+          model = "M7e Tera";
+          break;
+        default:
+          model = "Unknown";
+          break;
+        }
+      break;
+    }
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_HF_LF
     case TMR_SR_MODEL_M3E:
@@ -5105,7 +4753,8 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     TMR_stringCopy(value, model, (int)strlen(model));
     break;
   }    
-
+#endif /* ENABLE_TMR_PARAM_VERSION_MODEL */
+#if ENABLE_TMR_PARAM_VERSION_SOFTWARE
   case TMR_PARAM_VERSION_SOFTWARE:
   {
     char tmp[38];
@@ -5123,59 +4772,54 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
     TMR_stringCopy(value, tmp, 37);
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_VERSION_SOFTWARE */
+#if ENABLE_TMR_PARAM_LICENSE_KEY
   case TMR_PARAM_LICENSE_KEY:
     ret = TMR_ERROR_UNSUPPORTED;
 	break;
-
+#endif /* ENABLE_TMR_PARAM_LICENSE_KEY */
+#if ENABLE_TMR_PARAM_MANAGE_LICENSE_KEY
   case TMR_PARAM_MANAGE_LICENSE_KEY:
     ret = TMR_ERROR_UNSUPPORTED;
     break;
+#endif /* ENABLE_TMR_PARAM_MANAGE_LICENSE_KEY */
+#if ENABLE_TMR_PARAM_USER_CONFIG
   case TMR_PARAM_USER_CONFIG:
     ret = TMR_ERROR_UNSUPPORTED;
 	break;
+#endif /* ENABLE_TMR_PARAM_USER_CONFIG */
+#if ENABLE_TMR_PARAM_READER_STATS
   case TMR_PARAM_READER_STATS:
   {
-    if ((NULL != reader->pSupportsResetStats) && (false == *(reader->pSupportsResetStats)))
-    {
-      /* Command not supported, pop up the error */
-      return TMR_ERROR_UNSUPPORTED;
-    }
-    
-    /**
-     * We should ask for the fields which are requested by the user,
-     * if no fields are requested by the user, then fetch all fields.
-     */
-
-    if (TMR_READER_STATS_FLAG_NONE == reader->statsFlag)
-    {
-      reader->statsFlag = reader->userStatsFlag;
-    }
     ret = TMR_SR_cmdGetReaderStats(reader, reader->statsFlag, value);
     break;
   }
-
+#endif /* ENABLE_TMR_PARAM_READER_STATS */
+#if ENABLE_TMR_PARAM_READER_STATS_ENABLE
   case TMR_PARAM_READER_STATS_ENABLE:
   {
-    if ((NULL != reader->pSupportsResetStats) && (false == *(reader->pSupportsResetStats)))
-    {
-      /* Command not supported, pop up the error */
-      return TMR_ERROR_UNSUPPORTED;
-    }
-
     *(TMR_Reader_StatsFlag *)value = reader->statsFlag;
     break;
   }
+#endif /* ENABLE_TMR_PARAM_READER_STATS_ENABLE */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_READER_STATISTICS
   case TMR_PARAM_READER_STATISTICS:
   ret = TMR_SR_cmdGetReaderStatistics(reader, TMR_SR_READER_STATS_ALL, value);
   break;
+#endif /* ENABLE_TMR_PARAM_READER_STATISTICS */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_PRODUCT_GROUP
   case TMR_PARAM_PRODUCT_GROUP:
     {
       const char *group;
-      TMR_SR_ProductGroupID id = (TMR_SR_ProductGroupID)sr->productId;
-      switch (id)
+      ret = TMR_SR_cmdGetReaderConfiguration(reader, TMR_SR_CONFIGURATION_PRODUCT_GROUP_ID, &sr->productId);
+      if (TMR_SUCCESS != ret)
+      {
+        return ret;
+      }
+
+      switch (sr->productId)
       {
         case TMR_SR_PRODUCT_MODULE:
         case TMR_SR_PRODUCT_INVALID:
@@ -5203,19 +4847,23 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       }
       break;
     }
-
+#endif /* ENABLE_TMR_PARAM_PRODUCT_GROUP */
+#if ENABLE_TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT
   case TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT:
     {
       *(uint16_t *)value = sr->tagopSuccessCount;
       break;
     }
-
+#endif /* ENABLE_TMR_PARAM_TAGREADATA_TAGOPSUCCESSCOUNT */
+#if ENABLE_TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT
   case TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT:
     {
       *(uint16_t *)value = sr->tagopFailureCount;
       break;
     }
+#endif /* TMR_PARAM_TAGREADATA_TAGOPFAILURECOUNT */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_READER_WRITE_REPLY_TIMEOUT_EARLY_EXIT
   case TMR_PARAM_READER_WRITE_REPLY_TIMEOUT:
   case TMR_PARAM_READER_WRITE_EARLY_EXIT:
     {
@@ -5242,53 +4890,72 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
       }
     }
     break;
+#endif /* ENABLE_TMR_PARAM_READER_WRITE_REPLY_TIMEOUT */
 #endif /* TMR_ENABLE_UHF */
+#if ENABLE_TMR_PARAM_METADATAFLAG
   case TMR_PARAM_METADATAFLAG:
       {
         *(TMR_TRD_MetadataFlag *)value = reader->userMetadataFlag;
         break;
       }
+#endif /* ENABLE_TMR_PARAM_METADATAFLAG */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_REGION_QUANTIZATION_STEP
   case TMR_PARAM_REGION_QUANTIZATION_STEP:
     ret = TMR_SR_cmdGetQuantizationStep(reader, value);
     break;
+#endif /* ENABLE_TMR_PARAM_REGION_QUANTIZATION_STEP*/
+#if ENABLE_TMR_PARAM_REGION_MINIMUM_FREQUENCY
   case TMR_PARAM_REGION_MINIMUM_FREQUENCY:
     ret = TMR_SR_cmdGetMinimumFrequency(reader, value);
     break;
+#endif /* ENABLE_TMR_PARAM_REGION_MINIMUM_FREQUENCY */
 #endif /* TMR_ENABLE_UHF */
 #if !((!defined(TMR_ENABLE_UHF)) || defined(BARE_METAL))
+#if ENABLE_TMR_PARAM_REGULATORY_MODE
   case TMR_PARAM_REGULATORY_MODE:
     {
       *(TMR_SR_RegulatoryMode *)value = reader->regulatoryParams.RegMode;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_MODE */
+#if ENABLE_TMR_PARAM_REGULATORY_MODULATION
   case TMR_PARAM_REGULATORY_MODULATION:
     {
       *(TMR_SR_RegulatoryModulation *)value = reader->regulatoryParams.RegModulation;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_MODULATION */
+#if ENABLE_TMR_PARAM_REGULATORY_ONTIME
   case TMR_PARAM_REGULATORY_ONTIME:
     {
       *(uint32_t *)value = reader->regulatoryParams.regOnTime;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_ONTIME */
+#if ENABLE_TMR_PARAM_REGULATORY_OFFTIME
   case TMR_PARAM_REGULATORY_OFFTIME:
     {
       *(uint32_t *)value = reader->regulatoryParams.regOffTime;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_OFFTIME */
+#if ENABLE_TMR_PARAM_REGULATORY_ENABLE
   case TMR_PARAM_REGULATORY_ENABLE:
     {
       ret = TMR_ERROR_UNSUPPORTED;
       break;
     }
+#endif /* ENABLE_TMR_PARAM_REGULATORY_ENABLE */
 #endif /* TMR_ENABLE_HF_LF || BARE_METAL */
 #ifdef TMR_ENABLE_UHF
+#if ENABLE_TMR_PARAM_PER_ANTENNA_TIME
   case TMR_PARAM_PER_ANTENNA_TIME:
   {
     ret = TMR_SR_cmdGetPerAntennaTime(reader, (TMR_PortValueList *)value);
     break;
   }
+#endif /* ENABLE_TMR_PARAM_PER_ANTENNA_TIME */
 #endif /* TMR_ENABLE_UHF */
   default:
     ret = TMR_ERROR_NOT_FOUND;
@@ -5297,16 +4964,9 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
   switch (key)
   {
 #ifdef TMR_ENABLE_UHF
-  case TMR_PARAM_EXTENDEDEPC:
-      if (isM6eFamily(sr))
-      {
-        return TMR_ERROR_UNSUPPORTED;
-      }
   case TMR_PARAM_ANTENNA_CHECKPORT:
-  case TMR_PARAM_RADIO_ENABLEPOWERSAVE:
   case TMR_PARAM_RADIO_ENABLESJC:
   case TMR_PARAM_TAGREADDATA_RECORDHIGHESTRSSI:
-  case TMR_PARAM_TAGREADDATA_REPORTRSSIINDBM:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYANTENNA:
   case TMR_PARAM_TAGREADDATA_UNIQUEBYDATA:
 #else
@@ -5323,6 +4983,7 @@ TMR_SR_paramGet(struct TMR_Reader *reader, TMR_Param key, void *value)
   case TMR_PARAM_GEN2_TARGET:
   case TMR_PARAM_GEN2_BLF:
   case TMR_PARAM_GEN2_TARI:
+  case TMR_PARAM_GEN2_RFMODE:
   case TMR_PARAM_GEN2_BAP:
   case TMR_PARAM_GEN2_PROTOCOLEXTENSION:
   case TMR_PARAM_GEN2_T4:
@@ -5408,9 +5069,12 @@ TMR_SR_SerialReader_init(TMR_Reader *reader)
   memset(reader->u.serialReader.paramConfirmed,0,
          sizeof(reader->u.serialReader.paramConfirmed));
 
-  reader->u.serialReader.baudRate = 115200;
-  reader->u.serialReader.isUserBaudRateSet = false;
+  reader->u.serialReader.baudRate = TMR_DEFAULT_BAUDRATE;
+#ifndef TMR_ENABLE_GEN2_ONLY
   reader->u.serialReader.currentProtocol = TMR_TAG_PROTOCOL_NONE;
+#else
+  reader->u.serialReader.currentProtocol = TMR_TAG_PROTOCOL_GEN2;
+#endif /* TMR_ENABLE_GEN2_ONLY */
   reader->u.serialReader.versionInfo.hardware[0] = TMR_SR_MODEL_UNKNOWN;
   reader->u.serialReader.powerMode = TMR_SR_POWER_MODE_INVALID;
   reader->u.serialReader.transportTimeout = 5000;
@@ -5420,15 +5084,18 @@ TMR_SR_SerialReader_init(TMR_Reader *reader)
   reader->u.serialReader.tagsRemainingInBuffer = 0;
   reader->u.serialReader.searchTimeoutMs = 0;
 #ifdef TMR_ENABLE_UHF
+#if TMR_ENABLE_WAKE_PREAMBLES
   reader->u.serialReader.supportsPreamble = false;
+#endif /* TMR_ENABLE_WAKE_PREAMBLES */
   reader->u.serialReader.extendedEPC = false;
   reader->u.serialReader.gen2AccessPassword = 0;
   reader->u.serialReader.oldQ.type = TMR_SR_GEN2_Q_INVALID;
   reader->u.serialReader.writeMode = TMR_GEN2_WORD_ONLY;
-  reader->u.serialReader.readFilterTimeout = 0;
   reader->u.serialReader.gen2AllMemoryBankEnabled = false;
   reader->u.serialReader.isBapEnabled = false;
+#if TMR_ENABLE_CRC
   reader->u.serialReader.transportType = TMR_SR_MSG_SOURCE_UNKNOWN;
+#endif /* TMR_ENABLE_CRC */
   reader->u.serialReader.crcEnabled = true;
 #endif /* TMR_ENABLE_UHF */
   reader->u.serialReader.tagopSuccessCount = 0;
@@ -5442,14 +5109,22 @@ TMR_SR_SerialReader_init(TMR_Reader *reader)
   reader->u.serialReader.enableAutonomousRead = false;
   reader->u.serialReader.isBasetimeUpdated = false;
   reader->u.serialReader.elapsedTime = 0;
-  {
-    //initialize the probe baud rate list with the supported  baud rate values
-    TMR_uint32List value;
-    uint32_t rates[TMR_MAX_PROBE_BAUDRATE_LENGTH] ={9600, 115200, 921600, 19200, 38400, 57600,230400, 460800};
-    value.list = rates;
-    value.len = value.max = 8;
+  reader->u.serialReader.txRxMap = NULL;
+  reader->u.serialReader.defaultTxRxMap = NULL;
+  reader->u.serialReader.isTxRxMapSet = false;
+  reader->u.serialReader.isM6eFamily = false;
 
-    TMR_paramSet(reader, TMR_PARAM_PROBEBAUDRATES, &value);
+  {
+    int i = 0;
+
+    //initialize the probe baud rate list with the supported  baud rate values
+    uint32_t rates[TMR_MAX_PROBE_BAUDRATE_LENGTH] = { 9600, 115200, 921600, 19200, 38400, 57600,230400, 460800 };
+
+    reader->u.serialReader.probeBaudRates.len = 8;
+    for(i = 0; i < 8; i++)
+    {
+      reader->u.serialReader.probeBaudRates.list[i] = rates[i];
+    }
   }
 
   return TMR_reader_init_internal(reader);
@@ -5487,18 +5162,240 @@ uint16_t TMR_SR_getConfigWord(TMR_Reader *reader, TMR_TagOp_GEN2_NXP_Untraceable
 }
 #endif /* TMR_ENABLE_UHF */
 
+#if TMR_ENABLE_EXTENDED_TAGOPS
+TMR_Status
+getReadExtParams(TMR_ExtTagOp *op, TMR_uint8List *extParams)
+{
+  TMR_Status ret = TMR_SUCCESS;
+
+  switch(op->tagType)
+  {
+#if TMR_ENABLE_DESFIRE_TAGOPS
+    case TMR_ISO14443A_TAGTYPE_MIFARE_DESFIRE:
+    {
+      TMR_TagOp_DesFire_ReadData desFireReadOp;
+      desFireReadOp = op->u.desfire.u.readData;
+
+      //Append supOption.
+      SETU8(extParams->list, extParams->len, desFireReadOp.subCmd);
+
+      //Append Application ID.
+      SETU24(extParams->list, extParams->len, desFireReadOp.appId);
+
+      switch(desFireReadOp.subCmd)
+      {
+        case TMR_TAGOP_DESFIRE_CMD_READ:
+        {
+          //Append File ID.
+          SETU8(extParams->list,  extParams->len, desFireReadOp.fileId);
+
+          //Append File Type.
+          SETU8(extParams->list,  extParams->len, desFireReadOp.fileType);
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_FILE_SETTINGS:
+        {
+          //Append File ID.
+          SETU8(extParams->list, extParams->len, desFireReadOp.fileId);
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_AUTHENTICATE:
+        case TMR_TAGOP_DESFIRE_CMD_KEY_VERSION:
+        {
+          //Append Key Number.
+          SETU8(extParams->list, extParams->len, desFireReadOp.keyNo);
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_APP_ID:
+        {
+          //APP ID field is not required.
+          extParams->len -= APPID_LEN;
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_FILE_ID:
+        case TMR_TAGOP_DESFIRE_CMD_KEY_SETTINGS:
+        {
+          break;
+        }
+        default:
+          //Invalid sub option.
+          ret = TMR_ERROR_INVALID;
+          break;
+      }
+      break;
+    }
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+
+#if TMR_ENABLE_UL_NTAG_TAGOPS
+    case TMR_ISO14443A_TAGTYPE_ULTRALIGHT_NTAG:
+    case TMR_ISO14443A_TAGTYPE_NTAG:
+    {
+      TMR_TagOp_UL_Ntag_ReadData ulNtagReadOp;
+      ulNtagReadOp = op->u.ulNtag.u.readData;
+
+      //Append supOption.
+      SETU8(extParams->list, extParams->len, ulNtagReadOp.subCmd);
+      break;
+    }
+#endif /* TMR_ENABLE_UL_NTAG_TAGOPS */
+    default:
+      //Invalid tag-type.
+      ret = TMR_ERROR_INVALID;
+      break;
+  }
+
+  return ret;
+}
+
+TMR_Status
+getWriteExtParams(TMR_ExtTagOp *op, TMR_uint8List *extParams)
+{
+  TMR_Status ret = TMR_SUCCESS;
+
+  switch(op->tagType)
+  {
+#if TMR_ENABLE_DESFIRE_TAGOPS
+    case TMR_ISO14443A_TAGTYPE_MIFARE_DESFIRE:
+    {
+      TMR_TagOp_DesFire_WriteData desFireWriteOp;
+      desFireWriteOp = op->u.desfire.u.writeData; 
+
+      //Append supOption.
+      SETU8(extParams->list, extParams->len, desFireWriteOp.subCmd);
+
+      //Append Application ID.
+      SETU24(extParams->list, extParams->len, desFireWriteOp.appId);
+
+      switch(desFireWriteOp.subCmd)
+      {
+        case TMR_TAGOP_DESFIRE_CMD_FILE_ID:
+        case TMR_TAGOP_DESFIRE_CMD_WRITE:
+        {
+          //Append File ID.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.fileId);
+
+          //Append File Type.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.fileType);
+
+          if (TMR_TAGOP_DESFIRE_CMD_FILE_ID == desFireWriteOp.subCmd)
+          {
+            //Append File Size.
+            SETU16(extParams->list, extParams->len, desFireWriteOp.fileSize);
+
+            //Append Access Rights.
+            SETU16(extParams->list, extParams->len, desFireWriteOp.accessRights);
+          }
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_APP_ID:
+        {
+          //Append Key Settings.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.keySettings);
+
+          //Append Number of Keys.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.numKeys);
+
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_FILE_SETTINGS:
+        case TMR_TAGOP_DESFIRE_CMD_DELETE_FILE:
+        {
+          //Append File ID.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.fileId);
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_CHANGE_KEY:
+        {
+          //Append Old Key Number..
+          SETU8(extParams->list, extParams->len, desFireWriteOp.keyNo);
+
+          //Append New Key Number.
+          SETU8(extParams->list, extParams->len, desFireWriteOp.newKeyNo);
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_FORMAT:
+        {
+          //APP ID field is not required.
+          extParams->len -= APPID_LEN;
+          break;
+        }
+        case TMR_TAGOP_DESFIRE_CMD_DELETE_APP:
+        case TMR_TAGOP_DESFIRE_CMD_KEY_SETTINGS:
+        {
+          break;
+        }
+        default:
+          //Invalid sub option.
+          ret = TMR_ERROR_INVALID;
+          break;
+      }
+      break;
+    }
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+#if TMR_ENABLE_UL_NTAG_TAGOPS
+    case TMR_ISO14443A_TAGTYPE_ULTRALIGHT_NTAG:
+    {
+      TMR_TagOp_UL_Ntag_WriteData ulNtagWriteOp;
+      ulNtagWriteOp = op->u.ulNtag.u.writeData;
+
+      //Append supOption.
+      SETU8(extParams->list, extParams->len, ulNtagWriteOp.subCmd);
+      break;
+    }
+#endif /* TMR_ENABLE_UL_NTAG_TAGOPS */
+    default:
+      //Invalid tag-type.
+      ret = TMR_ERROR_INVALID;
+      break;
+  }
+
+  return ret;
+}
+
+bool
+isTagTypeFilterAvail(TMR_TagFilter *filter)
+{
+  if(filter != NULL)
+  {
+    if(filter->type != TMR_FILTER_TYPE_MULTI)
+    {
+      if(filter->type == TMR_FILTER_TYPE_TAGTYPE_SELECT)
+      {
+        return true;
+      }
+    }
+    else
+    {
+      uint8_t i = 0;
+
+      for(i = 0; i < filter->u.multiFilterList.len ; i++)
+      {
+        if(filter->u.multiFilterList.tagFilterList[i]->type == TMR_FILTER_TYPE_TAGTYPE_SELECT)
+        {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+
 TMR_Status
 TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *filter, TMR_uint8List *data)
 { 
   TMR_Status ret;
 #ifdef TMR_ENABLE_UHF
+#define TMR_HIGGS_EPC_LEN 12
   TMR_SR_SerialReader *sr;
 
-  if(reader->featureFlags & TMR_READER_FEATURES_FLAG_MULTI_SELECT)
-  {
-    isMultiSelectEnabled = ((filter) && (filter->type == TMR_FILTER_TYPE_TAG_DATA)) ? false : true;
-  }
-
+  isMultiSelectEnabled = ((filter) && (filter->type == TMR_FILTER_TYPE_TAG_DATA)) ? false : true;
   sr = &reader->u.serialReader;
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_HF_LF
@@ -5506,38 +5403,30 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   isAddrByteExtended = reader->featureFlags & TMR_READER_FEATURES_FLAG_ADDR_BYTE_EXTENSION;
 #endif /* TMR_ENABLE_HF_LF */
 
+  ret = TMR_SR_cmdGetCurrentProtocol(reader, &reader->tagOpParams.protocol);
+  if (TMR_SUCCESS != ret)
+  {
+    return ret;
+  }
+
   switch (tagop->type)
   {
 #ifdef TMR_ENABLE_UHF
   case (TMR_TAGOP_GEN2_WRITETAG):
     {
       TMR_TagOp_GEN2_WriteTag op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.writeTag;
 
       ret = TMR_SR_cmdWriteGen2TagEpc(reader, filter, sr->gen2AccessPassword, 
         (uint16_t)(sr->commandTimeout),
         op.epcptr->epcByteCount,
         op.epcptr->epc,
-        false);
+        false, data);
     }
     break;
   case (TMR_TAGOP_GEN2_KILL):
     {
 	  TMR_TagOp_GEN2_Kill op;
-           
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-	  if (TMR_SUCCESS != ret)
-	  {
-		return ret;
-	  }
-
       op = tagop->u.gen2.u.kill;
 
       ret = TMR_SR_cmdKillTag(reader,
@@ -5549,13 +5438,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_LOCK):
     {
 	  TMR_TagOp_GEN2_Lock op;
-           
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-	  if (TMR_SUCCESS != ret)
-	  {
-		return ret;
-	  }
-
       op = tagop->u.gen2.u.lock;
 
       ret = TMR_SR_cmdGEN2LockTag(reader, (uint16_t)sr->commandTimeout,
@@ -5565,27 +5447,15 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_WRITEDATA):
     {
       TMR_TagOp_GEN2_WriteData op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.writeData;
-      ret = TMR_SR_writeTagMemWords(reader, filter, op.bank, op.wordAddress, op.data.len, op.data.list);
+
+      ret = TMR_SR_writeTagMemWords(reader, filter, op.bank, op.wordAddress, op.data.len, op.data.list, data);
     }
     break;
   case (TMR_TAGOP_GEN2_READDATA):
     {
       TMR_TagOp_GEN2_ReadData op;
       TMR_TagReadData read;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if (NULL != data)
       {
@@ -5610,28 +5480,15 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_BLOCKWRITE):
     {
       TMR_TagOp_GEN2_BlockWrite op;
-           
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-	  if (TMR_SUCCESS != ret)
-	  {
-		return ret;
-      }
+      op = tagop->u.gen2.u.blockWrite;
 
-    op = tagop->u.gen2.u.blockWrite;
-    ret = TMR_SR_cmdBlockWrite(reader,(uint16_t)sr->commandTimeout, op.bank,
+      ret = TMR_SR_cmdBlockWrite(reader,(uint16_t)sr->commandTimeout, op.bank,
             op.wordPtr, op.data.len, op.data.list, sr->gen2AccessPassword, filter);
     }
     break;
   case (TMR_TAGOP_GEN2_BLOCKPERMALOCK):
     {
       TMR_TagOp_GEN2_BlockPermaLock op;
-           
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-	  if (TMR_SUCCESS != ret)
-	  {
-		return ret;
-      }
-
       op = tagop->u.gen2.u.blockPermaLock;
 
       ret = TMR_SR_cmdBlockPermaLock(reader, (uint16_t)sr->commandTimeout, op.readLock, op.bank,
@@ -5641,14 +5498,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_BLOCKERASE):
     {
       TMR_TagOp_GEN2_BlockErase op;
-      
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.blockErase;
+
       ret = TMR_SR_cmdBlockErase(reader, (uint16_t)sr->commandTimeout, op.bank, op.wordPtr,
                                                 op.wordCount, sr->gen2AccessPassword, filter);
     }
@@ -5657,14 +5508,9 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_ALIEN_HIGGS2_PARTIALLOADIMAGE):
     {
       TMR_TagOp_GEN2_Alien_Higgs2_PartialLoadImage op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
       op = tagop->u.gen2.u.custom.u.alien.u.higgs2.u.partialLoadImage;
-      if (op.epcptr->epcByteCount > 12 || op.epcptr->epcByteCount <=0 )
+
+      if (op.epcptr->epcByteCount > TMR_HIGGS_EPC_LEN || op.epcptr->epcByteCount <=0 )
       { /* Only 96 bit epc */
         return TMR_ERROR_PROTOCOL_INVALID_EPC;
       }
@@ -5675,15 +5521,9 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_ALIEN_HIGGS2_FULLLOADIMAGE):
     {
       TMR_TagOp_GEN2_Alien_Higgs2_FullLoadImage op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.alien.u.higgs2.u.fullLoadImage;
-      if (op.epcptr->epcByteCount > 12 || op.epcptr->epcByteCount <= 0 )
+
+      if (op.epcptr->epcByteCount > TMR_HIGGS_EPC_LEN || op.epcptr->epcByteCount <= 0 )
       { /* Only 96 bit epc */
         return TMR_ERROR_PROTOCOL_INVALID_EPC;
       }
@@ -5698,15 +5538,9 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
        * Tag Data commands.
        */
       TMR_TagOp_GEN2_Alien_Higgs3_FastLoadImage op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.alien.u.higgs3.u.fastLoadImage;
-      if (op.epcptr->epcByteCount > 12 || op.epcptr->epcByteCount <= 0 )
+
+      if (op.epcptr->epcByteCount > TMR_HIGGS_EPC_LEN || op.epcptr->epcByteCount <= 0 )
       { /* Only 96 bit epc */
         return TMR_ERROR_PROTOCOL_INVALID_EPC;
       }
@@ -5716,16 +5550,11 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     break;
   case (TMR_TAGOP_GEN2_ALIEN_HIGGS3_LOADIMAGE):
     {
+      #define TMR_HIGGS_MAX_DATA_LEN 76
       TMR_TagOp_GEN2_Alien_Higgs3_LoadImage op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.alien.u.higgs3.u.loadImage;
-      if (op.epcAndUserData->len > 76 || op.epcAndUserData->len <= 0 )
+
+      if (op.epcAndUserData->len > TMR_HIGGS_MAX_DATA_LEN || op.epcAndUserData->len <= 0 )
       { /* Only 76 byte epcAndUserData */
         return TMR_ERROR_MSG_INVALID_PARAMETER_VALUE;
       }
@@ -5736,12 +5565,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_ALIEN_HIGGS3_BLOCKREADLOCK):
     {
       TMR_TagOp_GEN2_Alien_Higgs3_BlockReadLock op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
       op = tagop->u.gen2.u.custom.u.alien.u.higgs3.u.blockReadLock;
 
       ret = TMR_SR_cmdHiggs3BlockReadLock(reader, (uint16_t)sr->commandTimeout, op.accessPassword, op.lockBits, filter);
@@ -5750,13 +5573,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_SETREADPROTECT):
     {
       TMR_TagOp_GEN2_NXP_SetReadProtect op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      
       op = tagop->u.gen2.u.custom.u.nxp.u.setReadProtect;
 
       ret = TMR_SR_cmdNxpSetReadProtect(reader, (uint16_t)sr->commandTimeout,
@@ -5766,14 +5582,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_RESETREADPROTECT):
     {
       TMR_TagOp_GEN2_NXP_ResetReadProtect op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      
       op = tagop->u.gen2.u.custom.u.nxp.u.resetReadProtect;
+
       ret = TMR_SR_cmdNxpResetReadProtect(reader, (uint16_t)sr->commandTimeout,
           tagop->u.gen2.u.custom.chipType, op.accessPassword, filter);
     }
@@ -5781,14 +5591,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_CHANGEEAS):
     {
       TMR_TagOp_GEN2_NXP_ChangeEAS op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.nxp.u.changeEAS;
+
       ret = TMR_SR_cmdNxpChangeEas(reader, (uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
         op.accessPassword, op.reset, filter);
     }
@@ -5796,14 +5600,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_EASALARM):
     {
       TMR_TagOp_GEN2_NXP_EASAlarm op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.nxp.u.EASAlarm;
+
       ret = TMR_SR_cmdNxpEasAlarm(reader, (uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
         op.dr, op.m, op.trExt, data, filter);
     }
@@ -5811,14 +5609,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_CALIBRATE):
     {
       TMR_TagOp_GEN2_NXP_Calibrate op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-      
       op = tagop->u.gen2.u.custom.u.nxp.u.calibrate;
+
       ret = TMR_SR_cmdNxpCalibrate(reader, (uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
         op.accessPassword, data, filter);
     }
@@ -5827,12 +5619,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_NXP_ChangeConfig op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-       
       if(NULL != data)
       {
         data->len = 0;      
@@ -5847,12 +5633,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
 	{
 	  TMR_TagOp_GEN2_NXP_Untraceable op;
 	  uint16_t configWord;
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 	  op = tagop->u.gen2.u.custom.u.nxp.u.untraceable;
+
 	  configWord = TMR_SR_getConfigWord(reader,op);
 	  ret = TMR_SR_cmdGen2v2NXPUntraceable(reader,(uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
 		 sr->gen2AccessPassword, configWord , op, data, filter);
@@ -5861,13 +5643,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_AUTHENTICATE):
 	{
 	  TMR_TagOp_GEN2_NXP_Authenticate op;
+      op = tagop->u.gen2.u.custom.u.nxp.u.authenticate;
 
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-	  op = tagop->u.gen2.u.custom.u.nxp.u.authenticate;
 	  ret = TMR_SR_cmdGen2v2NXPAuthenticate(reader,(uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
 		 sr->gen2AccessPassword, op, data, filter);
 	}
@@ -5875,13 +5652,8 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_NXP_READBUFFER):
 	{
 	  TMR_TagOp_GEN2_NXP_Readbuffer op;
+      op = tagop->u.gen2.u.custom.u.nxp.u.readBuffer;
 
-	  ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-	  op = tagop->u.gen2.u.custom.u.nxp.u.readBuffer;
 	  ret = TMR_SR_cmdGen2v2NXPReadBuffer(reader,(uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType,
 		 sr->gen2AccessPassword, op, data, filter);
 	}
@@ -5889,12 +5661,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IMPINJ_MONZA4_QTREADWRITE):
     {
       TMR_TagOp_GEN2_Impinj_Monza4_QTReadWrite op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -5909,13 +5675,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_GETSENSOR):
     {
       TMR_TagOp_GEN2_IDS_SL900A_GetSensorValue op;
-
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -5932,13 +5691,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_GetMeasurementSetup op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -5953,13 +5705,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_GETCALIBRATIONDATA):
     {
       TMR_TagOp_GEN2_IDS_SL900A_GetCalibrationData op;
-
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -5976,13 +5721,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetCalibrationData op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -5997,13 +5735,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_SETSFEPARAMETERS):
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetSfeParameters op;
-
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6021,13 +5752,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_GetLogState op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6042,13 +5766,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_SETLOGMODE):
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetLogMode op;
-
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6065,13 +5782,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_INITIALIZE):
     {
       TMR_TagOp_GEN2_IDS_SL900A_Initialize op;
-      
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6089,13 +5799,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_EndLog op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6111,13 +5814,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetPassword op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6132,13 +5828,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_ACCESSFIFOSTATUS):
     {
       TMR_TagOp_GEN2_IDS_SL900A_AccessFifoStatus op;
-      
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6155,13 +5844,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_AccessFifoRead op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6177,13 +5859,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_AccessFifoWrite op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6198,13 +5873,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_STARTLOG):
     {
       TMR_TagOp_GEN2_IDS_SL900A_StartLog op;
-      
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6222,13 +5890,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_GetBatteryLevel op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6244,13 +5905,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_IDS_SL900A_SETLOGLIMITS):
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetLogLimits op;
-
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       /* Do some error checking */
       if(NULL != data)
@@ -6268,13 +5922,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_IDS_SL900A_SetShelfLife op;
 
-      /* Set the protocol for tag operation*/
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       /* Do some error checking */
       if(NULL != data)
       {
@@ -6291,12 +5938,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_Activate_Secure_Mode op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6310,12 +5951,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_DENATRAN_IAV_AUTHENTICATEOBU):
     {
       TMR_TagOp_GEN2_Denatran_IAV_Authenticate_OBU op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6331,12 +5966,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_Activate_Siniav_Mode op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6350,12 +5979,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_OBU_AUTH_ID):
     {
       TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_ID op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6371,12 +5994,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass1 op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6390,12 +6007,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_AUTHENTICATE_OBU_FULL_PASS2):
     {
       TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass2 op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6411,12 +6022,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_OBU_ReadFromMemMap op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6431,12 +6036,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_Read_Sec op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6449,14 +6048,7 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     break;
   case (TMR_TAGOP_GEN2_OBU_WRITE_TO_MEM_MAP):
     {
-
       TMR_TagOp_GEN2_Denatran_IAV_OBU_WriteToMemMap op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6470,14 +6062,7 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     break;
   case (TMR_TAGOP_GEN2_DENATRAN_IAV_WRITE_SEC):
     {
-
       TMR_TagOp_GEN2_Denatran_IAV_Write_Sec op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6493,12 +6078,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_Get_Token_Id op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if ( TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if (NULL != data)
       {
         data->len = 0;
@@ -6512,12 +6091,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   case (TMR_TAGOP_GEN2_DENATRAN_IAV_AUTHENTICATE_OBU_FULL_PASS):
     {
       TMR_TagOp_GEN2_Denatran_IAV_OBU_Auth_Full_Pass op;
-
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
 
       if(NULL != data)
       {
@@ -6533,12 +6106,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Denatran_IAV_G0_PA_OBU_Auth_ID op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       if(NULL != data)
       {
         data->len = 0;
@@ -6553,12 +6120,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_Impinj_Monza6_MarginRead op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-
       op = tagop->u.gen2.u.custom.u.impinj.u.monza6.u.marginRead;
       ret = TMR_SR_cmdMonza6MarginRead(reader, (uint16_t)sr->commandTimeout, tagop->u.gen2.u.custom.chipType, 
           sr->gen2AccessPassword, op.bank, op.bitAddress, op.maskBitLength, op.mask , filter);
@@ -6568,12 +6129,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
     {
       TMR_TagOp_GEN2_NXP_UCODE7_ChangeConfig op;
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
-       
       if(NULL != data)
       {
         data->len = 0;
@@ -6818,11 +6373,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
       writeOp = tagop->u.list.list[0];
       readOp = tagop->u.list.list[1];
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
       if (NULL != data)
       {
         read.data.len = 0;
@@ -6855,11 +6405,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
       writeOp = tagop->u.list.list[0];
       readOp = tagop->u.list.list[1];
 
-      ret = setProtocol(reader, TMR_TAG_PROTOCOL_GEN2);
-      if (TMR_SUCCESS != ret)
-      {
-        return ret;
-      }
       if (NULL != data)
       {
         read.data.len = 0;
@@ -6889,22 +6434,6 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
   break;
 #endif /* TMR_ENABLE_UHF */
 #ifdef TMR_ENABLE_HF_LF
-  case TMR_TAGOP_WRITE_MEMORY:
-    {
-      TMR_TagOp_WriteMemory op;
-      op = tagop->u.writeMem;
-
-      ret = TMR_SR_cmdWriteMemory(reader, op.memType, op.address, op.data.len, op.data.list, filter);
-    }
-    break;
-  case TMR_TAGOP_READ_MEMORY:
-    {
-      TMR_TagOp_ReadMemory op;
-      op = tagop->u.readMem;
-
-      ret = TMR_SR_cmdReadMemory(reader, op.memType, op.address, op.len, filter, data);
-    }
-    break;
   case TMR_TAGOP_PASS_THROUGH:
     {
       TMR_TagOp_PassThrough op;
@@ -6912,6 +6441,82 @@ TMR_SR_executeTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop, TMR_TagFilter *
 
       ret = TMR_SR_cmdPassThrough(reader, op.timeout, op.configFlags,
                                     op.buffer.len, op.buffer.list, data);
+    }
+    break;
+  case TMR_TAGOP_READ_MEMORY:
+    {
+      TMR_ExtTagOp op;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+      uint8_t extParamsData[255];
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+      TMR_uint8List tagOpExtParams;
+
+      op = tagop->u.extTagOp;
+
+      //Reset extended params buffer length.
+      tagOpExtParams.len = 0;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+      if (TMR_TAGOP_EXT_TAG_MEMORY == op.readMem.memType)
+      {
+        //Initialize extended params buffer.
+        tagOpExtParams.list = extParamsData;
+        tagOpExtParams.max = sizeof(extParamsData) / sizeof(extParamsData[0]);
+
+        //Get the extended params for memory read.
+        ret = getReadExtParams(&op, &tagOpExtParams);
+        if (TMR_SUCCESS != ret)
+        {
+          return ret;
+        }
+
+        //Validate filter. Tag-Type filter is mandatory.
+        if (!isTagTypeFilterAvail(filter))
+        {
+          return TMR_ERROR_INVALID;
+        }
+      }
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+      ret = TMR_SR_cmdReadMemory(reader, &op, filter, data, tagOpExtParams);
+    }
+    break;
+  case TMR_TAGOP_WRITE_MEMORY:
+    {
+      TMR_ExtTagOp op;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+#if TMR_ENABLE_DESFIRE_TAGOPS
+      uint8_t extParamsData[255];
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+      TMR_uint8List tagOpExtParams;
+
+      op = tagop->u.extTagOp;
+
+      //Reset extended params buffer length.
+      tagOpExtParams.len = 0;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+#if TMR_ENABLE_DESFIRE_TAGOPS
+      if (TMR_TAGOP_EXT_TAG_MEMORY == op.writeMem.memType)
+      {
+        //Initialize extended params buffer.
+        tagOpExtParams.list = extParamsData;
+        tagOpExtParams.max = sizeof(extParamsData) / sizeof(extParamsData[0]);
+
+        //Get the extended params for memory Write.
+        ret = getWriteExtParams(&op, &tagOpExtParams);
+        if (TMR_SUCCESS != ret)
+        {
+          return ret;
+        }
+
+        //Validate filter. Tag-Type filter is mandatory.
+        if (!isTagTypeFilterAvail(filter))
+        {
+          return TMR_ERROR_INVALID;
+        }
+      }
+#endif /* TMR_ENABLE_DESFIRE_TAGOPS */
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+      ret = TMR_SR_cmdWriteMemory(reader, &op, filter, tagOpExtParams, data);
     }
     break;
 #endif /* TMR_ENABLE_HF_LF */
@@ -6950,7 +6555,7 @@ TMR_SR_addTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop,TMR_ReadPlan *rp, ui
   i = *j; lenbyte = *byte;
 
 #ifdef TMR_ENABLE_UHF
-  if(TMR_SR_MODEL_M3E != sr->versionInfo.hardware[0])
+  if(TMR_TAG_PROTOCOL_GEN2 == sr->currentProtocol)
   {
   switch(tagop->type)
   {
@@ -7929,23 +7534,117 @@ TMR_SR_addTagOp(struct TMR_Reader *reader, TMR_TagOp *tagop,TMR_ReadPlan *rp, ui
     {
       case TMR_TAGOP_READ_MEMORY:
         {
-          TMR_TagOp_ReadMemory *args;
-          args = &rp->u.simple.tagop->u.readMem;
+          uint8_t optbyte = i + 3;
+          TMR_ExtTagOp *args;
+          TMR_Memory_Type readMemType;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          uint8_t extParamsData[255];
+          TMR_uint8List tagOpExtParams;
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
 
-          TMR_SR_msgAddReadMemory(msg, &i, (uint16_t)readTimeMs, args->memType, args->address, args->len, false);
+          args = &rp->u.simple.tagop->u.extTagOp;
+          readMemType = args->readMem.memType;
+
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          //Reset extended params buffer length.
+          tagOpExtParams.len = 0;
+
+          if (TMR_TAGOP_EXT_TAG_MEMORY == args->readMem.memType)
+          {
+            readMemType = TMR_TAGOP_TAG_MEMORY;
+
+            //Initialize extended params buffer.
+            tagOpExtParams.list = extParamsData;
+            tagOpExtParams.max = sizeof(extParamsData) / sizeof(extParamsData[0]);
+
+            //Get the extended params for memory read.
+            ret = getReadExtParams(args, &tagOpExtParams);
+            if (TMR_SUCCESS != ret)
+            {
+              return ret;
+            }
+
+              //Validate filter. Tag-Type filter is mandatory.
+            if (!isTagTypeFilterAvail(rp->u.simple.filter))
+            {
+              return TMR_ERROR_INVALID;
+            }
+          }
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+
+          TMR_SR_msgAddReadMemory(msg, &i, (uint16_t)readTimeMs, readMemType, args->readMem.address, args->readMem.len, false);
+
+          //Assemble access password.
+          TMR_SR_msgAddAccessPassword(msg,  &i, &optbyte, rp->u.simple.tagop->u.extTagOp.accessPassword);
+
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          //Assemble extended params.
+          ret = TMR_SR_msgAddExtendedParams(msg, &i, &optbyte, &tagOpExtParams);
+          if (TMR_SUCCESS != ret)
+          {
+            return ret;
+          }
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
           break;
         }
       case TMR_TAGOP_WRITE_MEMORY:
         {
           uint16_t len;
-          TMR_TagOp_WriteMemory *args;
-          args = &rp->u.simple.tagop->u.writeMem;
+          uint8_t optbyte = i + 3;
+          TMR_ExtTagOp*args;
+          TMR_Memory_Type writeMemType;
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          uint8_t extParamsData[255];
+          TMR_uint8List tagOpExtParams;
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
 
-          TMR_SR_msgAddWriteMemory(msg, &i, (uint16_t)readTimeMs, args->memType, args->address);
+          args = &rp->u.simple.tagop->u.extTagOp;
+          writeMemType = args->writeMem.memType;
 
-          for (len = 0; len < args->data.len; len++)
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          //Reset extended params buffer length.
+          tagOpExtParams.len = 0;
+
+          if (TMR_TAGOP_EXT_TAG_MEMORY == args->writeMem.memType)
           {
-            SETU8(msg, i, args->data.list[len]);
+            writeMemType = TMR_TAGOP_TAG_MEMORY;
+
+            //Initialize extended params buffer.
+            tagOpExtParams.list = extParamsData;
+            tagOpExtParams.max = sizeof(extParamsData) / sizeof(extParamsData[0]);
+
+            //Get the extended params for memory write.
+            ret = getWriteExtParams(args, &tagOpExtParams);
+            if (TMR_SUCCESS != ret)
+            {
+              return ret;
+            }
+
+            //Validate filter. Tag-Type filter is mandatory.
+            if (!isTagTypeFilterAvail(rp->u.simple.filter))
+            {
+              return TMR_ERROR_INVALID;
+            }
+          }
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+
+          TMR_SR_msgAddWriteMemory(msg, &i, (uint16_t)readTimeMs, writeMemType, args->writeMem.address);
+
+          //Assemble access password.
+          TMR_SR_msgAddAccessPassword(msg,  &i, &optbyte, rp->u.simple.tagop->u.extTagOp.accessPassword);
+
+#if TMR_ENABLE_EXTENDED_TAGOPS
+          //Assemble extended params.
+          ret = TMR_SR_msgAddExtendedParams(msg, &i, &optbyte, &tagOpExtParams);
+          if (TMR_SUCCESS != ret)
+          {
+            return ret;
+          }
+#endif /* TMR_ENABLE_EXTENDED_TAGOPS */
+
+          for (len = 0; len < args->writeMem.data.len; len++)
+          {
+            SETU8(msg, i, args->writeMem.data.list[len]);
           }
           break;
         }

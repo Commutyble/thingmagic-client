@@ -6,7 +6,7 @@
  */
 
 /*
- * Copyright (c) 2010 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -59,6 +59,7 @@ tmr_sleep(uint32_t sleepms)
   delay(sleepms);
 }
 
+#if 0
 TMR_TimeStructure
 tmr_gettimestructure()
 {
@@ -79,3 +80,4 @@ tmr_gettimestructure()
   timestructure.tm_sec = (uint32_t)elements.Second;
   return timestructure;
 }
+#endif

@@ -9,7 +9,7 @@
  */
 
 /*
- * Copyright (c) 2010 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -68,6 +68,7 @@ extern "C" {
 TMR_TimeStructure tmr_gettimestructure(void);
 
 uint64_t tmr_gettime(void);
+uint8_t start_sysTickTimer(void);
 
 /* The time functions collectively return a 64-bit counter in units of
  * milliseconds. Both methods are used when timestamping events such

@@ -1,9 +1,10 @@
 /**
  * Sample program that detects the serial devices connected
  * and prints the information of the readers found.
- * @file devicedetection.c
+ * @file deviceDetection.c
  */
-
+#define UNICODE
+#include <serial_reader_imp.h>
 #include <tm_reader.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,9 +195,42 @@ int ReaderInfo(int portnumber)
 
   //connect reader
   ret = TMR_connect(rp);
+
+  /* MercuryAPI tries connecting to the module using default baud rate of 115200 bps.
+   * The connection may fail if the module is configured to a different baud rate. If
+   * that is the case, the MercuryAPI tries connecting to the module with other supported
+   * baud rates until the connection is successful using baud rate probing mechanism.
+   */
   if (TMR_SUCCESS != ret)
   {
-    return 0; //there maybe other readers connected hence skipping and moving to next readers 
+    if((ret == TMR_ERROR_TIMEOUT) && 
+       (TMR_READER_TYPE_SERIAL == rp->readerType))
+    {
+      uint32_t currentBaudRate;
+
+      /* Start probing mechanism. */
+      ret = TMR_SR_cmdProbeBaudRate(rp, &currentBaudRate);
+      if (TMR_SUCCESS != ret)
+      {
+        //there maybe other readers connected hence skipping and moving to next readers 
+        return 0;
+      }
+
+      /* Set the current baudrate, so that
+       * next TMR_Connect() call can use this baudrate to connect.
+       */
+      ret = TMR_paramSet(rp, TMR_PARAM_BAUDRATE, &currentBaudRate);
+      checkerr(rp, ret, 1, "Setting baudrate");
+
+      /* Connect using current baudrate */
+      ret = TMR_connect(rp);
+      checkerr(rp, ret, 1, "Connecting reader");
+    }
+    else
+    {
+      //there maybe other readers connected hence skipping and moving to next readers 
+      return 0;
+    }
   }
 
   model.value = string;

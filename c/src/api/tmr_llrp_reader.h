@@ -8,7 +8,7 @@
  */
 
 /*
- * Copyright (c) 2011 ThingMagic, Inc.
+ * Copyright (c) 2023 Novanta, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -283,10 +283,10 @@ TMR_Status TMR_LLRP_readTagMemWords(struct TMR_Reader *reader, const TMR_TagFilt
                                     uint16_t count, uint16_t *data);
 TMR_Status TMR_LLRP_writeTagMemBytes(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                     uint32_t bank, uint32_t addreass,
-                                    uint16_t count,const uint8_t data[]);
+                                    uint16_t count,const uint8_t data[], TMR_uint8List* response);
 TMR_Status TMR_LLRP_writeTagMemWords(struct TMR_Reader *reader, const TMR_TagFilter *filter,
                                     uint32_t bank, uint32_t address,
-                                    uint16_t count, const uint16_t *data);
+                                    uint16_t count, const uint16_t *data, TMR_uint8List* response);
 TMR_Status TMR_LLRP_firmwareLoad( TMR_Reader *reader, void *cookie, TMR_FirmwareDataProvider provider);
 TMR_Status TMR_LLRP_writeTag(TMR_Reader *reader, const TMR_TagFilter *filter, const TMR_TagData *data);
 TMR_Status TMR_LLRP_killTag(struct TMR_Reader *reader, const TMR_TagFilter *filter,

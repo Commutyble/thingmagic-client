@@ -88,7 +88,11 @@ void parseAntennaList(uint8_t *antenna, uint8_t *antennaCount, char *args)
 
   while(NULL != token)
   {
-    scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#ifdef WIN32
+      scans = sscanf(token, "%hh"SCNu8, &antenna[i]);
+#else
+      scans = sscanf(token, "%"SCNu8, &antenna[i]);
+#endif
     if (1 != scans)
     {
       fprintf(stdout, "Can't parse '%s' as an 8-bit unsigned integer value\n", token);
@@ -194,30 +198,13 @@ int main(int argc, char *argv[])
     checkerr(rp, ret, 1, "setting region");  
   }
 
-  /**
-   * Checking the software version of the sargas.
-   * The antenna detection is supported on sargas from software version of 5.3.x.x.
-   * If the Sargas software version is 5.1.x.x then antenna detection is not supported.
-   * User has to pass the antenna as arguments
-   */
-  {
-    ret = isAntDetectEnabled(rp, antennaList);
-    if(TMR_ERROR_UNSUPPORTED == ret)
-    {
-      fprintf(stdout, "Reader doesn't support antenna detection. Please provide antenna list.\n");
-      usage();
-    }
-    else
-    {
-      checkerr(rp, ret, 1, "Getting Antenna Detection Flag Status");
-    }
-  }
   //Use first antenna for operation
   if (NULL != antennaList)
   {
     ret = TMR_paramSet(rp, TMR_PARAM_TAGOP_ANTENNA, &antennaList[0]);
     checkerr(rp, ret, 1, "setting tagop antenna");  
   }
+
   /**
   * for antenna configuration we need two parameters
   * 1. antennaCount : specifies the no of antennas should
@@ -268,13 +255,15 @@ int main(int argc, char *argv[])
   TMR_TF_init_tag(&filter, &trd.tag);
   
   accessPassword = 0x0;
-
-  TMR_TagOp_init_GEN2_Lock(op, TMR_GEN2_LOCK_BITS_EPC, TMR_GEN2_LOCK_BITS_EPC, accessPassword);
+  
+  // Lock the tag
+  TMR_TagOp_init_GEN2_Lock(op, TMR_GEN2_LOCK_BITS_MASK_EPC, TMR_GEN2_LOCK_BITS_ACTION_EPC_LOCK, accessPassword);
   ret= TMR_executeTagOp(rp,op, &filter, NULL);
   checkerr(rp, ret, 1, "locking tag");
   printf("Locked EPC of tag %s\n", epcString);
 
-  TMR_TagOp_init_GEN2_Lock(op, TMR_GEN2_LOCK_BITS_EPC, 0, accessPassword);
+  // Unlock the tag
+  TMR_TagOp_init_GEN2_Lock(op, TMR_GEN2_LOCK_BITS_MASK_EPC, TMR_GEN2_LOCK_BITS_ACTION_EPC_UNLOCK, accessPassword);
   ret= TMR_executeTagOp(rp,op, &filter, NULL);
   checkerr(rp, ret, 1, "unlocking tag");
   printf("Unlocked EPC of tag %s\n", epcString);

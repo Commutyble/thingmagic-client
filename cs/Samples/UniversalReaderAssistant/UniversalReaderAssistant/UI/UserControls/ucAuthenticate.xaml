@@ -1,0 +1,168 @@
+﻿<UserControl x:Class="ThingMagic.URA2.ucAuthenticate"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ThingMagic.URA2"
+             mc:Ignorable="d" 
+             d:DesignHeight="680" d:DesignWidth="950">
+    <UserControl.Resources>
+        <local:IsEnabledConv x:Key="isEnabledConv" />
+    </UserControl.Resources>
+    <StackPanel Orientation="Vertical" Margin="10" Name="spAuthenticate" IsEnabled="False" HorizontalAlignment="Left">
+        <StackPanel.Resources>
+            <BooleanToVisibilityConverter x:Key="boolToVisible"/>
+        </StackPanel.Resources>
+        <Label Margin="5" Content=" Note : Authenticate Operation supports only GEN2 Tags. Rest of the protocols will be ignored"></Label>
+        <GroupBox  Name="tagAuthenticate"  Background="White">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold">Tag to Read/Write</TextBlock>
+            </GroupBox.Header>
+            <StackPanel Name="grid1" Margin="5">
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Vertical">
+                        <RadioButton Checked="rbFirstTagAuthenticateTb_Checked" Content="First tag to respond " GroupName="AuthenticateTab" IsChecked="True" Margin="3" Name="rbFirstTagAuthenticateTb" />
+                        <RadioButton ToolTipService.ShowOnDisabled="True" ToolTip="Go to Tag Results tab and right-click on a data cell"  Content="Tag selected in Tag Results page" GroupName="AuthenticateTab" Margin="3" Name="rbSelectedTagAuthenticateTb" IsEnabled="False"/>
+                    </StackPanel>
+                    <Button Content="Read" Margin="30,3,3,3" Name="btnRead" VerticalAlignment="Center" Width="75" Click="btnRead_Click" />
+                </StackPanel>
+                
+                <Grid Name="gdTagSelectionCriteria" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Vertical" Margin="3">
+                        <Label Margin="3" Name="lblSelectFilter" Content="Showing tag:" />
+                        <Label Margin="3" Content="Error" Name="lblAuthenticateTagError" Visibility="Collapsed" Foreground="#FFF60909" OpacityMask="#FFFA0000" />
+                    </StackPanel>
+                </Grid>
+                <TextBox Height="23" Margin="0,21,71,0" Name="txtEpc" VerticalAlignment="Top" Visibility="Collapsed" HorizontalAlignment="Right" Width="28" />
+                <TextBox Height="23" HorizontalAlignment="Left" Margin="647,21,0,0" Name="txtData" VerticalAlignment="Top" Visibility="Collapsed" Width="28" />
+            </StackPanel>
+        </GroupBox>
+        
+        <GroupBox Background="White" Name="gbKeys" Visibility="Visible">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold">Key Insertion and Activation</TextBlock>
+            </GroupBox.Header>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Label Grid.Row="0" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="crntKey0" Content="Current Key0 :"  />
+                <Label Grid.Row="1" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="keyZeroToWrite" Content="Key0 To Write :" />
+                <Label Grid.Row="2" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="crntKey1" Content="Current Key1 :" />
+                <Label Grid.Row="3" Grid.Column="0" Margin="3" HorizontalAlignment="Right" Name="keyOneToWrite" Content="Key1 To Write :" />
+
+                <Label Grid.Row="0" Grid.Column="1" Margin="3" Name="crntKey0Value" Content="" />
+                <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Name="txtbxKeyZero" MaxLength="32" Width="300" Text="" PreviewTextInput="txtbxVerifyKey_PreviewTextInput" PreviewKeyDown="txtbxVerifyKey_PreviewKeyDown" />
+                <Label Grid.Row="2" Grid.Column="1" Margin="3" Name="crntKey1Value" Content=""/>
+                <TextBox Grid.Row="3" Grid.Column="1" Margin="3" Name="txtbxKeyOne" MaxLength="32" Width="300" Text="" PreviewTextInput="txtbxVerifyKey_PreviewTextInput" PreviewKeyDown="txtbxVerifyKey_PreviewKeyDown"></TextBox>
+                
+                <DockPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2">
+                    <Button DockPanel.Dock="Right" HorizontalAlignment="Right" Name="btnActivateKeys" Content="Activate Keys" Width="100" Margin="3" Click="btnActivateKeys_Click">
+                        <Button.IsEnabled>
+                            <MultiBinding Converter="{StaticResource isEnabledConv}">
+                                <Binding ElementName="txtbxKeyZero" Path="IsEnabled"/>
+                                <Binding ElementName="txtbxKeyOne" Path="IsEnabled"/>
+                            </MultiBinding>
+                        </Button.IsEnabled>
+                    </Button>
+                    <Button DockPanel.Dock="Right" HorizontalAlignment="Right" Name="btnInsertKeys" Content="Insert Keys" Width="100" Margin="3" Click="btnInsertKeys_Click" >
+                        <Button.IsEnabled>
+                            <MultiBinding Converter="{StaticResource isEnabledConv}">
+                                <Binding ElementName="txtbxKeyZero" Path="IsEnabled"/>
+                                <Binding ElementName="txtbxKeyOne" Path="IsEnabled"/>
+                            </MultiBinding>
+                        </Button.IsEnabled>
+                    </Button>
+                </DockPanel>
+            </Grid>
+
+        </GroupBox>
+        <GroupBox Name="AuthReadData" Background="White">
+            <GroupBox.Header>
+                <TextBlock FontWeight="Bold">Authenticate and ReadData</TextBlock>
+            </GroupBox.Header>
+            <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Vertical"  Name="spAuthenticateFields" Background="White" Margin="0,5,0,15">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <Label Name="lblDatabaseKeyZero" Content="Database Key0 :" Margin="3" HorizontalAlignment="Right" />
+                        <Label Grid.Row="0" Grid.Column="1" Name="lblDatabaseKeyZeroValue" Content=" -------------------------------------------------------------" HorizontalAlignment="Left" VerticalAlignment="Center" />
+
+                        <Label  Grid.Row="1" Grid.Column="0" Margin="3" Name="lblVerificationKeyZero" Content="Verification Key0 :"  HorizontalAlignment="Right" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="3" Name="txtbxVerifyKeyZero" MaxLength="32" Width="300" Text=""  PreviewTextInput="txtbxVerifyKey_PreviewTextInput" PreviewKeyDown="txtbxVerifyKey_PreviewKeyDown" HorizontalAlignment="Left" VerticalAlignment="Center"></TextBox>
+
+                        <Label Grid.Row="2" Grid.Column="0" Margin="3" Name="lblDatabaseKeyOne" Content="Database Key1 :"  HorizontalAlignment="Right" />
+                        <Label Grid.Row="2" Grid.Column="1" Margin="3" Name="lblDatabaseKeyOneValue" Content=" -------------------------------------------------------------" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        
+                        <Label  Grid.Row="3" Grid.Column="0" Name="lblVerificationKeyOne" Content="Verification Key1 :" Margin="3" HorizontalAlignment="Right" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Name="txtbxVerifyKeyOne" MaxLength="32" Width="300" Text="" Margin="3" PreviewTextInput="txtbxVerifyKey_PreviewTextInput" PreviewKeyDown="txtbxVerifyKey_PreviewKeyDown" HorizontalAlignment="Left" VerticalAlignment="Center"></TextBox>
+                        
+                        <Label Grid.Row="4" Grid.Column="0" Name="lblRandomChallenge" Content="Random Challenge :" Margin="3" HorizontalAlignment="Right" Visibility="Collapsed"/>
+                        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
+                            <Label Margin="3" Name="lblRandomChallengeValue" Content="" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            <Button Margin="3,0,0,0" Name="btnRefresh" Content="Refresh" Click="btnRefresh_Click" HorizontalAlignment="Left" VerticalAlignment="Center" Width="80" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+                <StackPanel Orientation="Vertical" Name="spAuthenticateKeyOne" Background="White" Margin="3">
+                    <StackPanel Name="stackPanel17" Margin="3">
+                        <CheckBox Content="Enable" Name="chkReadData"  ToolTipService.ShowOnDisabled="True" IsChecked="False" Padding="5,0,0,0" Margin="4,0,0,0" />
+                        <StackPanel Name="stackPanel18"  Orientation="Horizontal" Visibility="{Binding ElementName=chkReadData, Path=IsChecked, Converter={StaticResource boolToVisible}}" Margin="0">
+                            <Label Name="lblhiddenReadvalue" Visibility="Collapsed" Content="" ></Label>
+                            <Label VerticalAlignment="Center" IsHitTestVisible="False" Content="MemBank" />
+                            <ComboBox  Margin="2" ToolTip="Select the Memory Bank to read from" SelectedIndex="0"  Name="cbxReadDataBank"  Width="70" >
+                                <ComboBoxItem Content="TID"/>
+                                <ComboBoxItem Content="EPC"/>
+                                <ComboBoxItem Content="User"/>
+                            </ComboBox>
+                            <Label Content="Start"    Name="lblReadStartAddr"  />
+                            <TextBox Margin="2" MaxLength="10"  HorizontalAlignment="Left"  Name="txtReadStartAddr" ToolTip="Specifies start address to read in multiples of 64bit blocks. start length = 1 means read from 64bit onwards." Width="30" Text="0" PreviewLostKeyboardFocus="txtReadStartAddr_PreviewLostKeyboardFocus" />
+                            <Label Content="Length"   Name="lblembReadLength" />
+                            <TextBox Margin="2" MaxLength="4"  Name="txtReadLength"  Text="1" ToolTip="Number of 64 bit blocks to read in HEX. 0 start address and 0 length = 64bit block memory bank." Width="30" PreviewLostKeyboardFocus="txtReadLength_PreviewLostKeyboardFocus"/>
+
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Name="spTam2Data" Margin="0" Visibility="Visible">
+                            <Label Name="lblTam2Data" Content="Returned Data = " HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            <Label Name="lblTam2DataValue" Content="" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <CheckBox Content="Read from Buffer" Name="chkReadBuffer"  ToolTipService.ShowOnDisabled="True" Padding="5,0,0,0" Margin="4,10,0,0" />
+                        <StackPanel Orientation="Horizontal" Name="spRdBufferData" Visibility="Visible">
+                            <Label Name="lblData" Content="Returned Data = " HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" Width="650">
+                                <Label Name="lblDataValue" Content=""  HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                            </ScrollViewer>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Name="btnAuthKeyZero" Content="Authenticate Key0" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="150,10,0,10" Padding="3" Click="btnAuthKeyZero_Click" />
+                            <Button Name="btnAuthKeyOne" Content="Authenticate Key1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="100,5,0,5" Padding="3" Click="btnAuthKeyOne_Click" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Visibility="Collapsed">
+                            <Label Name="lblChallenge1" Content="Returned Challenge = " HorizontalAlignment="Left" VerticalAlignment="Center" />
+                            <Label Name="lblChallenge1Value" Content="" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+    </StackPanel>
+</UserControl>
