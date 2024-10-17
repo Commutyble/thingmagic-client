@@ -228,10 +228,40 @@ int main(int argc, char * argv[]) {
     }
     printf("Error connecting.\n");
   }
+  checkerr(rp, ret, 1, "Connecting reader");
 
-  #ifndef BARE_METAL
-  checkerr(rp, ret, 1, "connecting reader");
-  #endif
+        /**              
+         * Power cycle the reader. Calling TMR_reboot() will do that.
+         **/
+        ret = TMR_reboot(rp);
+        checkerr(rp, ret, 1, "power cycling reader");
+  
+        /**
+         * power cycle will take some time to complete.
+         * 1. Fixed reader  : approximately 90sec.
+         * 2. Serial reader : approximately 250ms.
+         *
+         * till then try to reconnect the reader.
+        **/
+        printf("The reader is being rebooted. Once it has finished, it will reconnect ....\n");
+  
+        //reconnect to the reader
+        TMR_destroy(rp); 
+
+  printf("Awaiting reboot...\n");
+  usleep(250000);
+
+  for (int
+    try = 0;
+    try < 2;
+    try ++) {
+    ret = TMR_connect(rp);
+    if (ret == TMR_SUCCESS) {
+      break;
+    }
+    printf("Error connecting.\n");
+  }
+  checkerr(rp, ret, 1, "Connecting reader");
 
   model.value = string;
   model.max = sizeof(string);
@@ -240,11 +270,13 @@ int main(int argc, char * argv[]) {
   checkerr(rp, ret, 1, "Getting version model");
   #endif
 
+printf("connected to %s\n", model.value);
   if (0 != strcmp("M3e", model.value)) {
     region = TMR_REGION_NONE;
     ret = TMR_paramGet(rp, TMR_PARAM_REGION_ID, & region);
     #ifndef BARE_METAL
-    checkerr(rp, ret, 1, "getting region");
+    //checkerr(rp, ret, 1, "getting region");
+    printf("Region get call returned %d\n", ret);
     #endif
 
     if (TMR_REGION_NONE == region) {
@@ -492,12 +524,10 @@ int main(int argc, char * argv[]) {
     ret = TMR_read(rp, 100, NULL);
     int total_count = 0;
 
-    #ifndef BARE_METAL
-    if (TMR_ERROR_TAG_ID_BUFFER_FULL == ret) {
-      /* In case of TAG ID Buffer Full, extract the tags present
-       * in buffer.
-       */
-      fprintf(stdout, "reading tags:%s\n", TMR_strerr(rp, ret));
+    #ifndef BARE_META
+    if (ret == TMR_ERROR_TAG_ID_BUFFER_FULL) {
+        printf("Tag buffer full.  We must reboot reader.\n");
+        exit(0);
     } else {
       checkerr(rp, ret, 1, "reading tags");
     }
@@ -566,6 +596,7 @@ int main(int argc, char * argv[]) {
       }
 
       // Enable PRINT_TAG_METADATA Flags to print Metadata value
+      if (trd.data.len < 512)
       {
         uint16_t j = 0;
         for (j = 0;
